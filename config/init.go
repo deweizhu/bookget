@@ -8,7 +8,7 @@ import (
 
 var Conf Input
 
-const version = "24.0823"
+const version = "24.0923"
 
 // initSeq    false = 最小值 <= 当前页码 <=  最大值
 func initSeqRange() {
