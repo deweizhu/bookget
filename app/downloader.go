@@ -188,7 +188,7 @@ func WaitNewCookie() {
 			if FileExist(config.Conf.CookieFile) {
 				break
 			}
-			util.PrintSleepTime(10)
+			util.PrintSleepTime(config.Conf.Speed)
 		}
 	}()
 	wg.Wait()
@@ -206,7 +206,7 @@ func WaitNewCookieWithMsg(uri string) {
 			if FileExist(config.Conf.CookieFile) {
 				break
 			}
-			util.PrintSleepTime(8)
+			util.PrintSleepTime(config.Conf.Speed)
 		}
 	}()
 	wg.Wait()

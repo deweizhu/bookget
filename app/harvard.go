@@ -227,7 +227,6 @@ func (p *Harvard) doDezoomifyRs(iiifUrls []string) bool {
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
 		cookies := gohttp.ReadCookieFile(config.Conf.CookieFile)
 		args := []string{
-			"--dezoomer=deepzoom",
 			"-H", "Origin:" + referer,
 			"-H", "Referer:" + referer,
 			"-H", "User-Agent:" + config.Conf.UserAgent,
