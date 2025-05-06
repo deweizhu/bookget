@@ -98,8 +98,7 @@ func (r *DpmBj) download() (msg string, err error) {
 	cipherText := r.getCipherText(bs)
 	r.dt.Title = r.getTitle(bs)
 
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s %s %s\n", name, r.dt.Title, r.dt.Url)
+	log.Printf("Get %s %s\n", r.dt.Title, r.dt.Url)
 
 	if cipherText == nil || len(cipherText) == 0 {
 		return "cipherText not found", err

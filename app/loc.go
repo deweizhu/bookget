@@ -66,8 +66,7 @@ func (r *Loc) download() (msg string, err error) {
 	if err != nil || r.xmlContent == nil {
 		return "requested URL was not found.", err
 	}
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 
 	respVolume, err := r.getVolumes(r.dt.Url, r.dt.Jar)
 	if err != nil {

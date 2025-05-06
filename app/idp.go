@@ -53,8 +53,7 @@ func (r *Idp) getBookId(sUrl string) (bookId string) {
 }
 
 func (r *Idp) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 
 	canvases, err := r.getCanvases(r.dt.BookId, r.dt.Jar)
 	if err != nil || canvases == nil {

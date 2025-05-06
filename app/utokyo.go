@@ -51,8 +51,7 @@ func (p *Utokyo) getBookId(sUrl string) (bookId string) {
 }
 
 func (p *Utokyo) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", p.dt.Index)
-	log.Printf("Get %s  %s\n", name, p.dt.Url)
+	log.Printf("Get %s\n", p.dt.Url)
 	respVolume, err := p.getVolumes(p.dt.Url, p.dt.Jar)
 	if err != nil {
 		fmt.Println(err)

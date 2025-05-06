@@ -75,10 +75,9 @@ func (r *SiEdu) getBookId(sUrl string) (bookId string) {
 }
 
 func (r *SiEdu) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
-	apiUrl := "https://ids.si.edu/ids/manifest/" + r.dt.BookId
+	apiUrl := "https://" + r.dt.UrlParsed.Host + "/ids/manifest/" + r.dt.BookId
 	canvases, err := r.getCanvases(apiUrl, r.dt.Jar)
 	if err != nil || canvases == nil {
 		return "requested URL was not found.", err

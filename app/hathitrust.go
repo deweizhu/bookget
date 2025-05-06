@@ -54,8 +54,7 @@ func (r Hathitrust) getBookId(sUrl string) (bookId string) {
 }
 
 func (r Hathitrust) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 	canvases, err := r.getCanvases(r.dt.Url, r.dt.Jar)
 	if err != nil {
 		fmt.Println(err.Error())

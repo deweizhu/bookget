@@ -52,8 +52,7 @@ func (r *Nationaljp) getBookId(sUrl string) (bookId string) {
 }
 
 func (r *Nationaljp) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", (r.dt.Index))
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 
 	respVolume, err := r.getVolumes()
 	if err != nil {

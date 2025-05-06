@@ -58,8 +58,7 @@ func (r *Sdutcm) getBookId(sUrl string) (bookId string) {
 }
 
 func (r *Sdutcm) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 	r.body, err = r.getPageContent(r.dt.Url)
 	if err != nil {
 		return "requested URL was not found.", err

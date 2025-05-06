@@ -53,8 +53,7 @@ func (p *Wzlib) getBookId(sUrl string) (bookId string) {
 }
 
 func (p *Wzlib) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", p.dt.Index)
-	log.Printf("Get %s  %s\n", name, p.dt.Url)
+	log.Printf("Get %s\n", p.dt.Url)
 	p.dt.SavePath = CreateDirectory(p.dt.UrlParsed.Host, p.dt.BookId, "")
 
 	//旧版：瓯越记忆

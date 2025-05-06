@@ -61,8 +61,7 @@ func (r *Nomfoundation) getBookId(sUrl string) (bookId string) {
 }
 
 func (r *Nomfoundation) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
 	canvases, err := r.getCanvases(r.dt.Url, r.dt.Jar)
 	if err != nil || canvases == nil {

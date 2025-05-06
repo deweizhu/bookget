@@ -83,8 +83,7 @@ func (r *LodNLGoKr) download() (msg string, err error) {
 		r.PageBody = string(bs)
 		break
 	}
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 	//PDF
 	if strings.Contains(r.PageBody, "extention = \"PDF\";") {
 		r.fileExt = ".pdf"

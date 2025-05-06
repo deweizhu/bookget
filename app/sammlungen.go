@@ -49,8 +49,7 @@ func (r *Sammlungen) getBookId(sUrl string) (bookId string) {
 }
 
 func (r *Sammlungen) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 	manifestUrl := fmt.Sprintf("https://api.digitale-sammlungen.de/iiif/presentation/v2/%s/manifest", r.dt.BookId)
 	var iiif IIIF
 	return iiif.InitWithId(r.dt.Index, manifestUrl, r.dt.BookId)

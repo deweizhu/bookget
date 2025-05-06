@@ -62,8 +62,7 @@ func (r DziCnLib) Run(sUrl string) (msg string, err error) {
 }
 
 func (r DziCnLib) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 
 	r.ServerUrl = r.getServerUri()
 	if r.ServerUrl == "" {

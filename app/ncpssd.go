@@ -60,8 +60,7 @@ func (r *Ncpssd) download() (msg string, err error) {
 		fmt.Println(err)
 		return "requested URL was not found.", err
 	}
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 	bookId := r.dt.UrlParsed.Query().Get("type")
 	if bookId == "" {
 		bookId = "ncpssd"

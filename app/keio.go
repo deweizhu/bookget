@@ -83,8 +83,7 @@ func (r *Keio) getManifestUrl(sUrl string) (uri string, err error) {
 }
 
 func (r *Keio) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 
 	respVolume, err := r.getVolumes(r.dt.Url, r.dt.Jar)
 	if err != nil {

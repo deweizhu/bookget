@@ -78,8 +78,7 @@ func (r *War1931) mkdirAll(directory, vid string) (dirPath string) {
 }
 
 func (r *War1931) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 	apiUrl := "https://" + r.dt.UrlParsed.Host + "/backend-prod/esBook/findDetailsInfo/" + r.dt.BookId
 	partialVolumes, err := r.getVolumes(apiUrl, r.dt.Jar)
 	if err != nil {

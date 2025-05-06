@@ -99,8 +99,7 @@ func (r *Familysearch) getBaseUrl(sUrl string) (baseUrl, sgBaseUrl string, err e
 }
 
 func (r *Familysearch) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
 	var canvases []string
 	imageData, err := r.getImageData(r.dt.Url)

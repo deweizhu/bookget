@@ -63,8 +63,7 @@ func (r *Khirin) getBookId(sUrl string) (bookId string) {
 }
 
 func (r *Khirin) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s  %s\n", r.dt.Url)
 	r.dt.SavePath = CreateDirectory(r.dt.Url, r.dt.BookId, "")
 	manifestUrl, err := r.getManifestUrl(r.dt.Url)
 	if err != nil {

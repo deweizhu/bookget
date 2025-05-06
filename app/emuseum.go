@@ -62,8 +62,7 @@ func (d *Emuseum) getBookId(sUrl string) (bookId string) {
 }
 
 func (d *Emuseum) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", d.dt.Index)
-	log.Printf("Get %s  %s\n", name, d.dt.Url)
+	log.Printf("Get %s\n", d.dt.Url)
 
 	respVolume, err := d.getVolumes(d.dt.Url, d.dt.Jar)
 	if err != nil {

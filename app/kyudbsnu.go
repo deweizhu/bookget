@@ -80,8 +80,7 @@ func (r *KyudbSnu) getBookId(sUrl string) (bookId string) {
 }
 
 func (r *KyudbSnu) download() (msg string, err error) {
-	name := fmt.Sprintf("%04d", r.dt.Index)
-	log.Printf("Get %s  %s\n", name, r.dt.Url)
+	log.Printf("Get %s\n", r.dt.Url)
 	bs, err := r.getBody(r.dt.Url, r.dt.Jar)
 	if err != nil || bs == nil {
 		return "requested URL was not found.", err
