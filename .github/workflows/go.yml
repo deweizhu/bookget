@@ -65,14 +65,12 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: "bookget ${{ github.ref_name }}"
           body: "|
-      🚀 Automated release by **github-actions[bot]**  
+🚀 Automated release by **github-actions[bot]**  
       
-      **Assets:**
-      - Linux: `bookget-linux` / `bookget-linux-arm64`
-      - Windows: `bookget-windows.exe`
-      - MacOS: `bookget-macos` / `bookget-macos-arm64`
-      
-      *Updated at: ${{ github.run_attempt }}*
+**Assets:**
+- Linux: `bookget-linux` / `bookget-linux-arm64`
+- Windows: `bookget.exe`
+- MacOS: `bookget-macos` / `bookget-macos-arm64`
       "
           files: |
             dist/**/bookget*
