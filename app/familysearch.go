@@ -145,7 +145,7 @@ func (r *Familysearch) do(iiifUrls []string) (msg string, err error) {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		downloader.DezoomifyGo(r.ctx, uri, dest, args)
+		downloader.DezoomifyGo2(r.ctx, r.sgBaseUrl, uri, dest, args)
 		util.PrintSleepTime(config.Conf.Speed)
 	}
 	return "", err
