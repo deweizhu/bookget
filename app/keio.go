@@ -255,6 +255,7 @@ func (r *Keio) doDezoomifyRs(iiifUrls []string) bool {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(iiifUrls)
+	downloader := downloader.NewIIIFDownloader()
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -266,7 +267,7 @@ func (r *Keio) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		downloader.DezoomifyGo(r.ctx, uri, dest, args)
+		downloader.Dezoomify(r.ctx, uri, dest, args)
 	}
 	return true
 }

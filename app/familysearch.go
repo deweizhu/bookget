@@ -134,6 +134,13 @@ func (r *Familysearch) do(iiifUrls []string) (msg string, err error) {
 		"-H", "cookie:" + cookies,
 	}
 	size := len(iiifUrls)
+	// 创建下载器实例
+	downloader := downloader.NewIIIFDownloader()
+	// 设置固定值
+	downloader.DeepzoomTileFormat.FixedValues = map[string]interface{}{
+		"Level":  12,
+		"Format": config.Conf.FileExt,
+	}
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -144,7 +151,7 @@ func (r *Familysearch) do(iiifUrls []string) (msg string, err error) {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		downloader.DezoomifyGo2(r.ctx, r.sgBaseUrl, uri, dest, args)
+		downloader.DezoomifyWithServer(r.ctx, r.sgBaseUrl, uri, dest, args)
 		util.PrintSleepTime(config.Conf.Speed)
 	}
 	return "", err

@@ -95,6 +95,7 @@ func (r *Njuedu) do(dziUrls []string) (msg string, err error) {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(dziUrls)
+	downloader := downloader.NewIIIFDownloader()
 	for i, val := range dziUrls {
 		if !config.PageRange(i, size) {
 			continue
@@ -106,7 +107,7 @@ func (r *Njuedu) do(dziUrls []string) (msg string, err error) {
 			continue
 		}
 
-		if err := downloader.DezoomifyGo(r.ctx, inputUri, outfile, args); err == nil {
+		if err := downloader.Dezoomify(r.ctx, inputUri, outfile, args); err == nil {
 			os.Remove(inputUri)
 		}
 		util.PrintSleepTime(config.Conf.Speed)

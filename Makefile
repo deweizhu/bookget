@@ -30,7 +30,7 @@ darwin-arm64:
 	@$(MAKE) build GOOS=darwin GOARCH=arm64 SUFFIX=-macos-arm64
 
 windows-amd64:
-	@$(MAKE) build GOOS=windows GOARCH=amd64 SUFFIX=-windows.exe
+	@$(MAKE) build GOOS=windows GOARCH=amd64 SUFFIX=.exe
 
 # 清理
 .PHONY: clean

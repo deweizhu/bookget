@@ -127,7 +127,8 @@ func (r *DpmBj) do(uri string, dziFormat iiif.DziFormat) (msg string, err error)
 		return "", nil
 	}
 
-	if err := downloader.DezoomifyGo(r.ctx, uri, outfile, args); err == nil {
+	downloader := downloader.NewIIIFDownloader()
+	if err := downloader.Dezoomify(r.ctx, uri, outfile, args); err == nil {
 		os.Remove(uri)
 	}
 	return "", err

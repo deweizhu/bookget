@@ -97,6 +97,7 @@ func (r *Khirin) doDezoomifyRs(canvases []string) bool {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(canvases)
+	downloader := downloader.NewIIIFDownloader()
 	for i, uri := range canvases {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -116,7 +117,7 @@ func (r *Khirin) doDezoomifyRs(canvases []string) bool {
 		}
 		log.Printf("Get %s  %s\n", sortId, uri)
 
-		if err := downloader.DezoomifyGo(r.ctx, inputUri, dest, args); err == nil {
+		if err := downloader.Dezoomify(r.ctx, inputUri, dest, args); err == nil {
 			os.Remove(inputUri)
 		}
 	}

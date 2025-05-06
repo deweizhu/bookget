@@ -81,6 +81,7 @@ func (r *Tnm) do(dziUrls []string) (msg string, err error) {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(dziUrls)
+	downloader := downloader.NewIIIFDownloader()
 	for i, uri := range dziUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -92,7 +93,7 @@ func (r *Tnm) do(dziUrls []string) (msg string, err error) {
 			continue
 		}
 		log.Printf("Get %s  %s\n", sortId, uri)
-		downloader.DezoomifyGo(r.ctx, uri, dest, args)
+		downloader.Dezoomify(r.ctx, uri, dest, args)
 	}
 	return "", err
 }

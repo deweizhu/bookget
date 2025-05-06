@@ -13,8 +13,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
-	"os"
-	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -28,6 +27,8 @@ type DziCnLib struct {
 	ServerUrl string
 	Extention string
 	ctx       context.Context
+
+	Canvases map[int]string
 }
 
 func NewDziCnLib() *DziCnLib {
@@ -69,38 +70,48 @@ func (r DziCnLib) download() (msg string, err error) {
 		return "requested URL was not found.", err
 	}
 	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
-	canvases, err := r.getCanvases(r.dt.Url, r.dt.Jar)
+	r.Canvases, err = r.getCanvases(r.dt.Url, r.dt.Jar)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
-	log.Printf(" %d pages \n", len(canvases))
-	return r.do(canvases)
+	return r.dezoomify()
 }
 
-func (r DziCnLib) do(dziUrls []string) (msg string, err error) {
-	if dziUrls == nil {
-		return "", err
-	}
+func (r DziCnLib) dezoomify() (msg string, err error) {
+
 	storePath := r.dt.SavePath
 	referer := url.QueryEscape(r.dt.Url)
-	args := []string{"--dezoomer=deepzoom",
-		"-H", "Origin:" + referer,
+	args := []string{"-H", "Origin:" + referer,
 		"-H", "Referer:" + referer,
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
-	size := len(dziUrls)
-	for i, val := range dziUrls {
+	size := len(r.Canvases)
+	downloader := downloader.NewIIIFDownloader()
+	err = downloader.SetDeepZoomTileFormat("{{.ServerURL}}/{{.Level}}/{{.X}}/{{.Y}}.{{.Format}}")
+	if err != nil {
+		return "[err=SetDeepZoomTileFormat]", err
+	}
+	// 有些不规范的JPG/jpg扩展名服务器，直接用配置文件指定
+	ext := config.Conf.FileExt[1:]
+	// 设置固定值
+	downloader.DeepzoomTileFormat.FixedValues = map[string]interface{}{
+		"Level":  0,
+		"Format": ext,
+	}
+
+	for i, xml := range r.Canvases {
 		if !config.PageRange(i, size) {
 			continue
 		}
-		inputUri := storePath + val
-		outfile := storePath + fmt.Sprintf("%04d", i+1) + r.Extention
-		if FileExist(outfile) {
+		outputPath := storePath + fmt.Sprintf("%04d", i+1) + config.Conf.FileExt
+		if FileExist(outputPath) {
 			continue
 		}
-		if err := downloader.DezoomifyGo(r.ctx, inputUri, outfile, args); err == nil {
-			os.Remove(inputUri)
+
+		err = downloader.DezoomifyWithContent(r.ctx, xml, outputPath, args)
+		if err != nil {
+			return "[err=downloader.Dezoomify]", err
 		}
 		util.PrintSleepTime(config.Conf.Speed)
 	}
@@ -112,43 +123,43 @@ func (r DziCnLib) getVolumes(sUrl string, jar *cookiejar.Jar) (volumes []string,
 	panic("implement me")
 }
 
-func (r DziCnLib) getCanvases(apiUrl string, jar *cookiejar.Jar) (canvases []string, err error) {
+func (r DziCnLib) getCanvases(apiUrl string, jar *cookiejar.Jar) (map[int]string, error) {
 	//apiUrl := fmt.Sprintf("%s/tiles/infos.json", r.ServerHost)
 	bs, err := r.getBody(apiUrl, jar)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	var result iiif.BaseResponse
 	if err = json.Unmarshal(bs, &result); err != nil {
-		return
+		return nil, err
 	}
 	if result.Tiles == nil {
-		return
+		return nil, err
 	}
 
-	text := `{
-    "Image": {
-    "xmlns":    "http://schemas.microsoft.com/deepzoom/2009",
-    "Url":      "%s",
-    "Format":   "%s",
-    "Overlap":  "1", 
-	"MaxLevel": "0",
-	"Separator": "/",
-        "TileSize": "%d",
-        "Size": {
-            "Height": "%d",
-            "Width":  "%d"
-        }
-    }
-}
-`
+	text := `
+	<?xml version="1.0" encoding="UTF-8"?>
+	<Image xmlns="http://schemas.microsoft.com/deepzoom/2009"
+	  Url="%s"
+	  Format="%s"
+	  Overlap="1"
+	  TileSize="%d"
+	  >
+	  <Size 
+		Height="%d"
+		Width="%d"
+	  />
+	</Image>
+	`
 	// 有些不规范的JPG/jpg扩展名服务器，直接用配置文件指定
 	ext := config.Conf.FileExt[1:]
-	canvases = make([]string, 0, len(result.Tiles))
+	r.Canvases = make(map[int]string, len(result.Tiles))
 	for key, item := range result.Tiles {
-		sortId := fmt.Sprintf("%s.json", key)
-		dest := r.dt.SavePath + sortId
+		id, err := strconv.Atoi(key)
+		if err != nil {
+			return nil, err
+		}
 		serverUrl := fmt.Sprintf("%s/tiles/%s/", r.ServerUrl, key)
 		// 有些不规范的JPG/jpg扩展名服务器
 		// http://zggj.jslib.org.cn/medias/0118816-0002//tiles/infos.json
@@ -157,42 +168,17 @@ func (r DziCnLib) getCanvases(apiUrl string, jar *cookiejar.Jar) (canvases []str
 		//	r.Extention = "." + strings.ToLower(item.Extension)
 		//}
 
-		jsonText := ""
 		if item.TileSize.W == 0 {
-			jsonText = fmt.Sprintf(text, serverUrl, ext, item.TileSize2.Width, item.Height, item.Width)
+			r.Canvases[id] = fmt.Sprintf(text, serverUrl, ext, item.TileSize2.Width, item.Height, item.Width)
 		} else {
-			jsonText = fmt.Sprintf(text, serverUrl, ext, item.TileSize.W, item.Height, item.Width)
+			r.Canvases[id] = fmt.Sprintf(text, serverUrl, ext, item.TileSize.W, item.Height, item.Width)
 		}
-		_ = os.WriteFile(dest, []byte(jsonText), os.ModePerm)
-		canvases = append(canvases, sortId)
 	}
-	sort.Sort(util.SortByStr(canvases))
-	return canvases, nil
+	return r.Canvases, nil
 }
 
 func (r DziCnLib) getServerUri() string {
 	return strings.Split(r.dt.Url, "/tiles/")[0]
-	//m := regexp.MustCompile(`(?i)typeId=([A-z0-9_-]+)`).FindStringSubmatch(r.dt.UrlParsed.RawQuery)
-	//typeId := 80
-	//if m != nil {
-	//	typeId, _ = strconv.Atoi(m[1])
-	//}
-	//match := regexp.MustCompile(`/([A-z0-9]+)/tiles/infos.json`).FindStringSubmatch(r.dt.Url)
-	//if match == nil {
-	//	return ""
-	//}
-	//bookId := match[1]
-	//apiUrl := fmt.Sprintf("%s://%s/portal/book/view?bookId=%s&typeId=%d", r.dt.UrlParsed.Scheme,
-	//	r.dt.UrlParsed.Host, bookId, typeId)
-	//bs, err := r.getBody(apiUrl, r.dt.Jar)
-	//if err != nil {
-	//	return ""
-	//}
-	//var respServerBase iiif.ServerResponse
-	//if err = json.Unmarshal(bs, &respServerBase); err != nil {
-	//	return ""
-	//}
-	//return fmt.Sprintf("%s://%s%s", r.dt.UrlParsed.Scheme, r.dt.UrlParsed.Host, respServerBase.Data.ServerBase)
 }
 
 func (r DziCnLib) getBody(apiUrl string, jar *cookiejar.Jar) ([]byte, error) {
