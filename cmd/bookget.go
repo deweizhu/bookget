@@ -120,7 +120,7 @@ func executeBatchURLs() {
 
 // runInteractiveMode 运行交互模式
 func runInteractiveMode(ctx context.Context) {
-	cleanupCookieFile()
+	//cleanupCookieFile()
 	for {
 		rawUrl, err := readURLFromInput()
 		if err != nil {
@@ -135,7 +135,7 @@ func runInteractiveMode(ctx context.Context) {
 
 // runInteractiveModeImage 运行交互模式：图片下载
 func runInteractiveModeImage(ctx context.Context) {
-	cleanupCookieFile()
+	//cleanupCookieFile()
 	app.NewImageDownloader().Run("")
 }
 
@@ -245,9 +245,9 @@ func processURL(ctx context.Context, rawUrl string) error {
 
 // cleanupCookieFile 清理cookie文件
 func cleanupCookieFile() {
-	//if err := os.Remove(config.Conf.CookieFile); err != nil && !os.IsNotExist(err) {
-	//	log.Printf("清理cookie文件失败: %v\n", err)
-	//}
+	if err := os.Remove(config.Conf.CookieFile); err != nil && !os.IsNotExist(err) {
+		log.Printf("清理cookie文件失败: %v\n", err)
+	}
 }
 
 // checkForUpdates 检查版本更新
