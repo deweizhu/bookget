@@ -2,6 +2,7 @@ package app
 
 import (
 	"bookget/config"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
 	"bookget/pkg/util"
 	"context"
@@ -16,13 +17,15 @@ import (
 )
 
 type Bluk struct {
-	dt *DownloadTask
+	dt  *DownloadTask
+	ctx context.Context
 }
 
 func NewBluk() *Bluk {
 	return &Bluk{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -86,7 +89,7 @@ func (r *Bluk) download() (msg string, err error) {
 }
 
 func (r *Bluk) do(imgUrls []string) (msg string, err error) {
-	if config.Conf.UseDziRs {
+	if config.Conf.UseDzi {
 		r.doDezoomifyRs(imgUrls)
 	} else {
 		r.doNormal(imgUrls)
@@ -177,7 +180,8 @@ func (r *Bluk) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		util.StartProcess(uri, dest, args)
+		downloader.DezoomifyGo(r.ctx, uri, dest, args)
+
 	}
 	return true
 }

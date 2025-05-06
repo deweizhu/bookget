@@ -3,6 +3,7 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/family"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
 	"bookget/pkg/util"
 	"context"
@@ -25,12 +26,15 @@ type Familysearch struct {
 	userAgent   string
 	baseUrl     string
 	sgBaseUrl   string
+
+	ctx context.Context
 }
 
 func NewFamilysearch() *Familysearch {
 	return &Familysearch{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -70,8 +74,7 @@ func (r *Familysearch) getBookId(sUrl string) (bookId string) {
 }
 
 func (r *Familysearch) getBaseUrl(sUrl string) (baseUrl, sgBaseUrl string, err error) {
-	ctx := context.Background()
-	cli := gohttp.NewClient(ctx, gohttp.Options{
+	cli := gohttp.NewClient(r.ctx, gohttp.Options{
 		CookieFile: config.Conf.CookieFile,
 		CookieJar:  r.dt.Jar,
 		Headers: map[string]interface{}{
@@ -124,7 +127,7 @@ func (r *Familysearch) do(iiifUrls []string) (msg string, err error) {
 	cookies := gohttp.ReadCookieFile(config.Conf.CookieFile)
 
 	sid := r.getSessionId()
-	args := []string{"--dezoomer=deepzoom",
+	args := []string{
 		"-H", "authority:www.familysearch.org",
 		"-H", "Authorization:" + sid,
 		"-H", "referer:" + referer,
@@ -142,58 +145,15 @@ func (r *Familysearch) do(iiifUrls []string) (msg string, err error) {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		util.StartProcess(uri, dest, args)
+		downloader.DezoomifyGo(r.ctx, uri, dest, args)
 		util.PrintSleepTime(config.Conf.Speed)
 	}
 	return "", err
 }
 
-func (r *Familysearch) getVolumes(sUrl string, jar *cookiejar.Jar) (volumes []string, err error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (r *Familysearch) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string, err error) {
-	panic("implement me")
-}
-
 func (r *Familysearch) getImageData(sUrl string) (imageData family.ImageData, err error) {
-	type ReqData struct {
-		Type string `json:"type"`
-		Args struct {
-			ImageURL string `json:"imageURL"`
-			State    struct {
-				ImageOrFilmUrl     string `json:"imageOrFilmUrl"`
-				ViewMode           string `json:"viewMode"`
-				SelectedImageIndex int    `json:"selectedImageIndex"`
-			} `json:"state"`
-			Locale string `json:"locale"`
-		} `json:"args"`
-	}
 
-	type Response struct {
-		ImageURL string `json:"imageURL"`
-		ArkId    string `json:"arkId"`
-		DgsNum   string `json:"dgsNum"`
-		Meta     struct {
-			SourceDescriptions []struct {
-				Id     string `json:"id"`
-				About  string `json:"about"`
-				Titles []struct {
-					Value string `json:"value"`
-					Lang  string `json:"lang,omitempty"`
-				} `json:"titles"`
-				Identifiers struct {
-					HttpGedcomxOrgPrimary []string `json:"http://gedcomx.org/Primary"`
-				} `json:"identifiers"`
-				Descriptor struct {
-					Resource string `json:"resource"`
-				} `json:"descriptor,omitempty"`
-			} `json:"sourceDescriptions"`
-		} `json:"meta"`
-	}
-
-	var data = ReqData{}
+	var data = family.ReqData{}
 	data.Type = "image-data"
 	data.Args.ImageURL = sUrl
 	data.Args.State.ImageOrFilmUrl = ""
@@ -201,7 +161,7 @@ func (r *Familysearch) getImageData(sUrl string) (imageData family.ImageData, er
 	data.Args.State.SelectedImageIndex = -1
 	data.Args.Locale = "zh"
 
-	bs, err := r.postJson(r.apiUrl, r)
+	bs, err := r.postJson(r.apiUrl, data)
 	if err != nil {
 		return
 	}
@@ -211,7 +171,7 @@ func (r *Familysearch) getImageData(sUrl string) (imageData family.ImageData, er
 		err = errors.New(msg)
 		return
 	}
-	resp := Response{}
+	resp := family.Response{}
 	if err = json.Unmarshal(bs, &resp); err != nil {
 		return
 	}
@@ -227,30 +187,13 @@ func (r *Familysearch) getImageData(sUrl string) (imageData family.ImageData, er
 }
 
 func (r *Familysearch) getFilmData(sUrl string, imageData family.ImageData) (canvases []string, err error) {
-	type ReqData struct {
-		Type string `json:"type"`
-		Args struct {
-			DgsNum string `json:"dgsNum"`
-			State  struct {
-				I                  string `json:"i"`
-				Cat                string `json:"cat"`
-				ImageOrFilmUrl     string `json:"imageOrFilmUrl"`
-				CatalogContext     string `json:"catalogContext"`
-				ViewMode           string `json:"viewMode"`
-				SelectedImageIndex int    `json:"selectedImageIndex"`
-			} `json:"state"`
-			Locale    string `json:"locale"`
-			SessionId string `json:"sessionId"`
-			LoggedIn  bool   `json:"loggedIn"`
-		} `json:"args"`
-	}
 
 	u, err := url.Parse(imageData.ImageURL)
 	if err != nil {
 		return nil, err
 	}
 	q := u.Query()
-	var data = ReqData{}
+	var data = family.FilmDataReqData{}
 	data.Type = "film-data"
 	data.Args.DgsNum = imageData.DgsNum
 	data.Args.State.CatalogContext = q.Get("cat")
@@ -262,19 +205,7 @@ func (r *Familysearch) getFilmData(sUrl string, imageData family.ImageData) (can
 	data.Args.LoggedIn = true
 	data.Args.SessionId = r.getSessionId()
 
-	type Response struct {
-		DgsNum             string      `json:"dgsNum"`
-		Images             []string    `json:"images"`
-		PreferredCatalogId string      `json:"preferredCatalogId"`
-		Type               string      `json:"type"`
-		WaypointCrumbs     interface{} `json:"waypointCrumbs"`
-		WaypointURL        interface{} `json:"waypointURL"`
-		Templates          struct {
-			DasTemplate string `json:"dasTemplate"`
-			DzTemplate  string `json:"dzTemplate"`
-		} `json:"templates"`
-	}
-	bs, err := r.postJson(r.apiUrl, r)
+	bs, err := r.postJson(r.apiUrl, data)
 	if err != nil {
 		return
 	}
@@ -284,14 +215,15 @@ func (r *Familysearch) getFilmData(sUrl string, imageData family.ImageData) (can
 		err = errors.New(msg)
 		return
 	}
-	resp := Response{}
+	resp := family.FilmDataResponse{}
 	if err = json.Unmarshal(bs, &resp); err != nil {
 		return
 	}
 	//https://sg30p0.familysearch.org/service/records/storage/deepzoomcloud/dz/v1/{id}/{image}
 	r.dziTemplate = regexp.MustCompile(`\{[A-z]+\}`).ReplaceAllString(resp.Templates.DzTemplate, "%s")
-	r.dziTemplate = regexp.MustCompile(`https://([A-z0-9\./]+)/service/records/storage/deepzoomcloud`).ReplaceAllString(r.dziTemplate, r.baseUrl)
+	r.dziTemplate = regexp.MustCompile(`https://([^/]+)`).ReplaceAllString(r.dziTemplate, r.baseUrl)
 	for _, image := range resp.Images {
+		//https://www.familysearch.org/service/records/storage/deepzoomcloud/dz/v1/3:1:3QSQ-G9DL-LLT2/image.xml
 		//https://familysearch.org/ark:/61903/3:1:3QSQ-G9MC-ZSQ7-3/image.xml
 		m := regexp.MustCompile(`(?i)ark:/(?:[A-z0-9-_:]+)/([A-z\d-_:]+)/image.xml`).FindStringSubmatch(image)
 		if m == nil {
@@ -304,9 +236,8 @@ func (r *Familysearch) getFilmData(sUrl string, imageData family.ImageData) (can
 	return canvases, err
 }
 
-func (r *Familysearch) postJson(sUrl string, d interface{}) ([]byte, error) {
-	ctx := context.Background()
-	cli := gohttp.NewClient(ctx, gohttp.Options{
+func (r *Familysearch) postJson(sUrl string, data interface{}) ([]byte, error) {
+	cli := gohttp.NewClient(r.ctx, gohttp.Options{
 		CookieFile: config.Conf.CookieFile,
 		CookieJar:  r.dt.Jar,
 		Headers: map[string]interface{}{
@@ -316,7 +247,7 @@ func (r *Familysearch) postJson(sUrl string, d interface{}) ([]byte, error) {
 			"origin":       r.baseUrl,
 			"referer":      r.dt.Url,
 		},
-		JSON: r,
+		JSON: data,
 	})
 	resp, err := cli.Post(sUrl)
 	if err != nil {
@@ -339,8 +270,7 @@ func (r *Familysearch) getSessionId() string {
 
 func (r *Familysearch) postBody(sUrl string, data []byte) ([]byte, error) {
 	sid := r.getSessionId()
-	ctx := context.Background()
-	cli := gohttp.NewClient(ctx, gohttp.Options{
+	cli := gohttp.NewClient(r.ctx, gohttp.Options{
 		CookieFile: config.Conf.CookieFile,
 		CookieJar:  r.dt.Jar,
 		Headers: map[string]interface{}{
@@ -362,8 +292,7 @@ func (r *Familysearch) postBody(sUrl string, data []byte) ([]byte, error) {
 }
 
 func (r *Familysearch) getBody(apiUrl string, jar *cookiejar.Jar) ([]byte, error) {
-	ctx := context.Background()
-	cli := gohttp.NewClient(ctx, gohttp.Options{
+	cli := gohttp.NewClient(r.ctx, gohttp.Options{
 		CookieFile: config.Conf.CookieFile,
 		CookieJar:  jar,
 		Headers: map[string]interface{}{

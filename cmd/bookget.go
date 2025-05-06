@@ -245,9 +245,9 @@ func processURL(ctx context.Context, rawUrl string) error {
 
 // cleanupCookieFile 清理cookie文件
 func cleanupCookieFile() {
-	if err := os.Remove(config.Conf.CookieFile); err != nil && !os.IsNotExist(err) {
-		log.Printf("清理cookie文件失败: %v\n", err)
-	}
+	//if err := os.Remove(config.Conf.CookieFile); err != nil && !os.IsNotExist(err) {
+	//	log.Printf("清理cookie文件失败: %v\n", err)
+	//}
 }
 
 // checkForUpdates 检查版本更新

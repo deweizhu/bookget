@@ -3,6 +3,7 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/iiif"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
 	"bookget/pkg/util"
 	"context"
@@ -17,13 +18,15 @@ import (
 )
 
 type Stanford struct {
-	dt *DownloadTask
+	dt  *DownloadTask
+	ctx context.Context
 }
 
 func NewStanford() *Stanford {
 	return &Stanford{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -87,7 +90,7 @@ func (r *Stanford) download() (msg string, err error) {
 }
 
 func (r *Stanford) do(imgUrls []string) (msg string, err error) {
-	if config.Conf.UseDziRs {
+	if config.Conf.UseDzi {
 		r.doDezoomifyRs(imgUrls)
 	} else {
 		r.doNormal(imgUrls)
@@ -118,7 +121,7 @@ func (r *Stanford) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []stri
 	canvases = make([]string, 0, size)
 	for _, canvase := range manifest.Sequences[0].Canvases {
 		for _, image := range canvase.Images {
-			if config.Conf.UseDziRs {
+			if config.Conf.UseDzi {
 				//dezoomify-rs URL
 				iiiInfo := fmt.Sprintf("%s/info.json", image.Resource.Service.Id)
 				canvases = append(canvases, iiiInfo)
@@ -177,7 +180,7 @@ func (r *Stanford) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		util.StartProcess(uri, dest, args)
+		downloader.DezoomifyGo(r.ctx, uri, dest, args)
 	}
 	return true
 }

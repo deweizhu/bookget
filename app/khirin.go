@@ -3,8 +3,8 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/iiif"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
-	"bookget/pkg/util"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,12 +20,14 @@ import (
 type Khirin struct {
 	dt     *DownloadTask
 	apiUrl string
+	ctx    context.Context
 }
 
 func NewKhirin() *Khirin {
 	return &Khirin{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -77,7 +79,7 @@ func (r *Khirin) download() (msg string, err error) {
 }
 
 func (r *Khirin) do(canvases []string) (msg string, err error) {
-	if config.Conf.UseDziRs {
+	if config.Conf.UseDzi {
 		r.doDezoomifyRs(canvases)
 	} else {
 		r.doNormal(canvases)
@@ -114,7 +116,8 @@ func (r *Khirin) doDezoomifyRs(canvases []string) bool {
 			continue
 		}
 		log.Printf("Get %s  %s\n", sortId, uri)
-		if ret := util.StartProcess(inputUri, dest, args); ret == true {
+
+		if err := downloader.DezoomifyGo(r.ctx, inputUri, dest, args); err == nil {
 			os.Remove(inputUri)
 		}
 	}
@@ -179,7 +182,7 @@ func (r *Khirin) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string
 	canvases = make([]string, 0, size)
 	for _, canvase := range manifest.Sequences[0].Canvases {
 		for _, image := range canvase.Images {
-			if config.Conf.UseDziRs {
+			if config.Conf.UseDzi {
 				//dezoomify-rs URL
 				iiiInfo := fmt.Sprintf("%s/info.json", image.Resource.Service.Id)
 				canvases = append(canvases, iiiInfo)

@@ -3,7 +3,9 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/njuedu"
+	"bookget/pkg/downloader"
 	"bookget/pkg/util"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,12 +18,14 @@ import (
 type Njuedu struct {
 	dt     *DownloadTask
 	typeId int
+	ctx    context.Context
 }
 
 func NewNjuedu() *Njuedu {
 	return &Njuedu{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -102,7 +106,8 @@ func (r *Njuedu) do(dziUrls []string) (msg string, err error) {
 		if FileExist(outfile) {
 			continue
 		}
-		if ret := util.StartProcess(inputUri, outfile, args); ret == true {
+
+		if err := downloader.DezoomifyGo(r.ctx, inputUri, outfile, args); err == nil {
 			os.Remove(inputUri)
 		}
 		util.PrintSleepTime(config.Conf.Speed)

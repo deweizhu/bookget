@@ -3,6 +3,7 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/iiif"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
 	"bookget/pkg/util"
 	"context"
@@ -17,13 +18,15 @@ import (
 )
 
 type Berlin struct {
-	dt *DownloadTask
+	dt  *DownloadTask
+	ctx context.Context
 }
 
 func NewBerlin() *Berlin {
 	return &Berlin{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -88,7 +91,7 @@ func (r *Berlin) download() (msg string, err error) {
 }
 
 func (r *Berlin) do(imgUrls []string) (msg string, err error) {
-	if config.Conf.UseDziRs {
+	if config.Conf.UseDzi {
 		r.doDezoomifyRs(imgUrls)
 	} else {
 		r.doNormal(imgUrls)
@@ -119,7 +122,7 @@ func (r *Berlin) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string
 	canvases = make([]string, 0, size)
 	for _, canvase := range manifest.Sequences[0].Canvases {
 		for _, image := range canvase.Images {
-			if config.Conf.UseDziRs {
+			if config.Conf.UseDzi {
 				//dezoomify-rs URL
 				//iiiInfo := fmt.Sprintf("%s/info.json", image.Resource.Service.Id)
 				//https://ngcs-core.staatsbibliothek-berlin.de/dzi/PPN3303598630/PHYS_0001.dzi
@@ -187,7 +190,7 @@ func (r *Berlin) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		util.StartProcess(uri, dest, args)
+		downloader.DezoomifyGo(r.ctx, uri, dest, args)
 	}
 	return true
 }

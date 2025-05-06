@@ -4,7 +4,9 @@ import (
 	"bookget/config"
 	"bookget/model/iiif"
 	xcrypt "bookget/pkg/crypt"
+	"bookget/pkg/downloader"
 	"bookget/pkg/util"
+	"context"
 	"fmt"
 	"log"
 	"net/http/cookiejar"
@@ -30,13 +32,15 @@ const (
 )
 
 type DpmBj struct {
-	dt *DownloadTask
+	dt  *DownloadTask
+	ctx context.Context
 }
 
 func NewDpmBj() *DpmBj {
 	return &DpmBj{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -110,7 +114,7 @@ func (r *DpmBj) download() (msg string, err error) {
 	return r.do(dest, dziFormat)
 }
 
-func (r *DpmBj) do(dest string, dziFormat iiif.DziFormat) (msg string, err error) {
+func (r *DpmBj) do(uri string, dziFormat iiif.DziFormat) (msg string, err error) {
 	referer := fmt.Sprintf("https://%s", r.dt.UrlParsed.Host)
 	args := []string{"--dezoomer=deepzoom",
 		"-H", "Origin:" + referer,
@@ -123,8 +127,9 @@ func (r *DpmBj) do(dest string, dziFormat iiif.DziFormat) (msg string, err error
 	if util.FileExist(outfile) {
 		return "", nil
 	}
-	if ret := util.StartProcess(dest, outfile, args); ret == true {
-		os.Remove(dest)
+
+	if err := downloader.DezoomifyGo(r.ctx, uri, outfile, args); err == nil {
+		os.Remove(uri)
 	}
 	return "", err
 }

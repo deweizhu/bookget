@@ -3,6 +3,7 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/cuhk"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
 	"bookget/pkg/util"
 	"context"
@@ -17,13 +18,15 @@ import (
 )
 
 type Cuhk struct {
-	dt *DownloadTask
+	dt  *DownloadTask
+	ctx context.Context
 }
 
 func NewCuhk() *Cuhk {
 	return &Cuhk{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -77,7 +80,7 @@ func (r *Cuhk) do(imgUrls []string) (msg string, err error) {
 	if imgUrls == nil {
 		return
 	}
-	if config.Conf.UseDziRs {
+	if config.Conf.UseDzi {
 		r.doDezoomifyRs(imgUrls)
 	} else {
 		r.doNormal(imgUrls)
@@ -103,13 +106,14 @@ func (r *Cuhk) doDezoomifyRs(iiifUrls []string) bool {
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
 		cookies := gohttp.ReadCookieFile(config.Conf.CookieFile)
-		args := []string{"--dezoomer=deepzoom",
+		args := []string{
 			"-H", "Origin:" + referer,
 			"-H", "Referer:" + referer,
 			"-H", "User-Agent:" + config.Conf.UserAgent,
 			"-H", "cookie:" + cookies,
 		}
-		util.StartProcess(uri, dest, args)
+		downloader.DezoomifyGo(r.ctx, uri, dest, args)
+
 	}
 	return true
 }
@@ -189,7 +193,7 @@ func (r *Cuhk) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string, 
 	}
 	for _, page := range resp.ImagePage {
 		var imgUrl string
-		if config.Conf.UseDziRs {
+		if config.Conf.UseDzi {
 			//dezoomify-rs URL
 			imgUrl = fmt.Sprintf("https://%s/iiif/2/%s/info.json", r.dt.UrlParsed.Host, page.Identifier)
 		} else {

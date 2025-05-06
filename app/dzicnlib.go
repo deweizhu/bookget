@@ -3,6 +3,7 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/iiif"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
 	"bookget/pkg/util"
 	"context"
@@ -26,12 +27,14 @@ type DziCnLib struct {
 	dt        *DownloadTask
 	ServerUrl string
 	Extention string
+	ctx       context.Context
 }
 
 func NewDziCnLib() *DziCnLib {
 	return &DziCnLib{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -97,7 +100,7 @@ func (r DziCnLib) do(dziUrls []string) (msg string, err error) {
 		if FileExist(outfile) {
 			continue
 		}
-		if ret := util.StartProcess(inputUri, outfile, args); ret == true {
+		if err := downloader.DezoomifyGo(r.ctx, inputUri, outfile, args); err == nil {
 			os.Remove(inputUri)
 		}
 		util.PrintSleepTime(config.Conf.Speed)

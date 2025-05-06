@@ -32,9 +32,7 @@ type Input struct {
 	Format        string //;全高清图下载时，指定宽度像素（16开纸185mm*260mm，像素2185*3071）
 	UserAgent     string //自定义UserAgent
 	AutoDetect    int    //自动检测下载URL。可选值[0|1|2]，;0=默认;1=通用批量下载（类似IDM、迅雷）;2= IIIF manifest.json 自动检测下载图片
-	DezoomifyPath string //dezoomify-rs 本地目录位置
-	DezoomifyRs   string //dezoomify-rs 参数
-	UseDziRs      bool   //启用DezoomifyRs下载IIIF
+	UseDzi        bool   //启用Dezoomify下载IIIF
 	FileExt       string //指定下载的扩展名
 	Threads       int
 	MaxConcurrent int
@@ -70,7 +68,7 @@ func Init(ctx context.Context) bool {
 	flag.StringVar(&Conf.Format, "format", iniConf.Format, "IIIF 图像请求URI: full/full/0/default.jpg")
 	flag.StringVar(&Conf.UserAgent, "user-agent", iniConf.UserAgent, "user-agent")
 	flag.BoolVar(&Conf.Bookmark, "bookmark", iniConf.Bookmark, "只下载书签目录，可选值[0|1]。0=否，1=是。仅对 gj.tianyige.com.cn 有效。")
-	flag.BoolVar(&Conf.UseDziRs, "dezoomify-rs", iniConf.UseDziRs, "使用dezoomify-rs下载，仅对支持iiif的网站生效。")
+	flag.BoolVar(&Conf.UseDzi, "dezoomify", iniConf.UseDzi, "使用dezoomify-rs下载，仅对支持iiif的网站生效。")
 	flag.StringVar(&Conf.CookieFile, "cookie", iniConf.CookieFile, "指定cookie.txt文件路径")
 	flag.StringVar(&Conf.LocalStorage, "local-storage", iniConf.LocalStorage, "指定localStorage.txt文件路径")
 	flag.StringVar(&Conf.FileExt, "extension", iniConf.FileExt, "指定文件扩展名[.jpg|.tif|.png]等")
@@ -82,8 +80,6 @@ func Init(ctx context.Context) bool {
 	flag.IntVar(&Conf.AutoDetect, "auto-detect", iniConf.AutoDetect, "自动检测下载URL。可选值[0|1|2]，;0=默认;\n1=通用批量下载（类似IDM、迅雷）;\n2= IIIF manifest.json 自动检测下载图片")
 	flag.BoolVar(&Conf.Help, "help", false, "显示帮助")
 	flag.BoolVar(&Conf.Version, "version", false, "显示版本 -v")
-	flag.StringVar(&Conf.DezoomifyRs, "dezoomify-rs-args", iniConf.DezoomifyRs, "dezoomify-rs 参数")
-	Conf.DezoomifyPath = iniConf.DezoomifyPath
 	flag.Parse()
 
 	k := len(os.Args)
@@ -156,9 +152,7 @@ func initINI() (io Input, err error) {
 		Format:        format,
 		UserAgent:     ua,
 		AutoDetect:    0,
-		DezoomifyPath: "",
-		DezoomifyRs:   "-l --compression 20",
-		UseDziRs:      false,
+		UseDzi:        true,
 		FileExt:       ".jpg",
 		Threads:       1,
 		MaxConcurrent: c,
@@ -166,18 +160,6 @@ func initINI() (io Input, err error) {
 		Bookmark:      false,
 		Help:          false,
 		Version:       false,
-	}
-
-	if os.PathSeparator == '\\' {
-		io.DezoomifyPath = "dezoomify-rs.exe"
-		if fi, err := os.Stat(dir + "\\dezoomify-rs.exe"); err == nil && fi.Size() > 0 {
-			io.DezoomifyPath = dir + "\\dezoomify-rs.exe"
-		}
-	} else {
-		io.DezoomifyPath = "dezoomify-rs"
-		if fi, err := os.Stat(dir + "/dezoomify-rs"); err == nil && fi.Size() > 0 {
-			io.DezoomifyPath = dir + "/dezoomify-rs"
-		}
 	}
 
 	cfg, err := ini.LoadSources(ini.LoadOptions{IgnoreInlineComment: true}, configPath)
@@ -195,8 +177,8 @@ func initINI() (io Input, err error) {
 	}
 
 	// 读取cookie和localStorage路径
-	io.CookieFile = cfg.Section("paths").Key("cookie").String()
-	io.LocalStorage = cfg.Section("paths").Key("local-storage").String()
+	io.CookieFile = cfg.Section("paths").Key("cookie").MustString(cFile)
+	io.LocalStorage = cfg.Section("paths").Key("local-storage").MustString(localStorage)
 
 	// 读取下载相关设置
 	secDown := cfg.Section("download")
@@ -223,13 +205,9 @@ func initINI() (io Input, err error) {
 
 	// 读取dzi相关设置
 	secDzi := cfg.Section("dzi")
-	io.UseDziRs = secDzi.Key("dezoomify-rs").MustBool(false)
-	io.DezoomifyRs = secDzi.Key("dezoomify-rs-args").String()
+	io.UseDzi = secDzi.Key("dezoomify").MustBool(false)
 	io.Format = secDzi.Key("format").MustString(format)
 
-	if !strings.Contains(io.DezoomifyRs, "-n") && !strings.Contains(io.DezoomifyRs, "--parallelism") {
-		io.DezoomifyRs += fmt.Sprintf(" -n=%d", io.Threads)
-	}
 	return io, nil
 }
 

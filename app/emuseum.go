@@ -3,6 +3,7 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/iiif"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
 	"bookget/pkg/util"
 	"context"
@@ -18,13 +19,15 @@ import (
 )
 
 type Emuseum struct {
-	dt *DownloadTask
+	dt  *DownloadTask
+	ctx context.Context
 }
 
 func NewEmuseum() *Emuseum {
 	return &Emuseum{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -91,7 +94,7 @@ func (d *Emuseum) download() (msg string, err error) {
 }
 
 func (d *Emuseum) do(imgUrls []string) (msg string, err error) {
-	if config.Conf.UseDziRs {
+	if config.Conf.UseDzi {
 		d.doDezoomifyRs(imgUrls)
 	} else {
 		d.doNormal(imgUrls)
@@ -134,7 +137,7 @@ func (d *Emuseum) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []strin
 				image.Resource.Service.Id = strings.Replace(image.Resource.Service.Id, "/100001001002.tif", "/100001001001.tif", 1)
 				image.Resource.Id = strings.Replace(image.Resource.Id, "/100001001002.tif", "/100001001001.tif", 1)
 			}
-			if config.Conf.UseDziRs {
+			if config.Conf.UseDzi {
 				//dezoomify-rs URL
 				iiiInfo := fmt.Sprintf("%s/info.json", image.Resource.Service.Id)
 				canvases = append(canvases, iiiInfo)
@@ -193,7 +196,7 @@ func (d *Emuseum) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		util.StartProcess(uri, dest, args)
+		downloader.DezoomifyGo(d.ctx, uri, dest, args)
 	}
 	return true
 }

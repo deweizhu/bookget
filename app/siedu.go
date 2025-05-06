@@ -3,8 +3,8 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/iiif"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
-	"bookget/pkg/util"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,13 +19,15 @@ import (
 )
 
 type SiEdu struct {
-	dt *DownloadTask
+	dt  *DownloadTask
+	ctx context.Context
 }
 
 func NewSiEdu() *SiEdu {
 	return &SiEdu{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -115,7 +117,7 @@ func (r *SiEdu) do(iiifUrls []string) (msg string, err error) {
 			continue
 		}
 		log.Printf("Get %s  %s\n", sortId, uri)
-		if ret := util.StartProcess(inputUri, dest, args); ret == true {
+		if err := downloader.DezoomifyGo(r.ctx, inputUri, dest, args); err == nil {
 			os.Remove(inputUri)
 		}
 	}

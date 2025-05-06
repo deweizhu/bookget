@@ -3,8 +3,8 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/war"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
-	"bookget/pkg/util"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,12 +21,14 @@ type War1931 struct {
 	docType         string
 	fileCode        string
 	jsonUrlTemplate string
+	ctx             context.Context
 }
 
 func NewWar1931() *War1931 {
 	return &War1931{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -136,7 +138,7 @@ func (r *War1931) do(canvases []string) (msg string, err error) {
 			continue
 		}
 		log.Printf("Get %s  %s\n", sortId, uri)
-		if ret := util.StartProcess(inputUri, dest, args); ret == true {
+		if err := downloader.DezoomifyGo(r.ctx, inputUri, dest, args); err == nil {
 			os.Remove(inputUri)
 		}
 	}

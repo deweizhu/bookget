@@ -3,6 +3,7 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/iiif"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
 	"bookget/pkg/util"
 	"context"
@@ -17,13 +18,15 @@ import (
 )
 
 type Niiac struct {
-	dt *DownloadTask
+	dt  *DownloadTask
+	ctx context.Context
 }
 
 func NewNiiac() *Niiac {
 	return &Niiac{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -88,7 +91,7 @@ func (p *Niiac) download() (msg string, err error) {
 }
 
 func (p *Niiac) do(imgUrls []string) (msg string, err error) {
-	if config.Conf.UseDziRs {
+	if config.Conf.UseDzi {
 		p.doDezoomifyRs(imgUrls)
 	} else {
 		p.doNormal(imgUrls)
@@ -127,7 +130,7 @@ func (p *Niiac) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string,
 	canvases = make([]string, 0, size)
 	for _, canvase := range manifest.Sequences[0].Canvases {
 		for _, image := range canvase.Images {
-			if config.Conf.UseDziRs {
+			if config.Conf.UseDzi {
 				//dezoomify-rs URL
 				iiiInfo := fmt.Sprintf("%s/info.json", image.Resource.Service.Id)
 				canvases = append(canvases, iiiInfo)
@@ -191,7 +194,8 @@ func (p *Niiac) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		util.StartProcess(uri, dest, args)
+		downloader.DezoomifyGo(p.ctx, uri, dest, args)
+
 	}
 	return true
 }

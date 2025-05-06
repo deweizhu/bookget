@@ -2,6 +2,7 @@ package app
 
 import (
 	"bookget/config"
+	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
 	"bookget/pkg/util"
 	"context"
@@ -50,12 +51,14 @@ type CafaEduItem struct {
 type CafaEdu struct {
 	dt        *DownloadTask
 	ServerUrl string
+	ctx       context.Context
 }
 
 func NewCafaEdu() *CafaEdu {
 	return &CafaEdu{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dt:  new(DownloadTask),
+		ctx: context.Background(),
 	}
 }
 
@@ -120,7 +123,7 @@ func (r *CafaEdu) download() (msg string, err error) {
 }
 
 func (r *CafaEdu) do(imgUrls []string) (msg string, err error) {
-	if config.Conf.UseDziRs {
+	if config.Conf.UseDzi {
 		r.doDezoomifyRs(imgUrls)
 	} else {
 		r.doNormal(imgUrls)
@@ -150,7 +153,7 @@ func (r *CafaEdu) getCanvases(apiUrl string, jar *cookiejar.Jar) (canvases []str
 	}
 	canvases = make([]string, 0, len(manifest.Item.Tiles))
 	for _, canvase := range manifest.Item.Tiles {
-		if config.Conf.UseDziRs {
+		if config.Conf.UseDzi {
 			//dezoomify-rs URL
 			iiiInfo := "https://" + r.dt.UrlParsed.Host + canvase.Id + "/info.json"
 			canvases = append(canvases, iiiInfo)
@@ -227,7 +230,7 @@ func (r *CafaEdu) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		util.StartProcess(uri, dest, args)
+		downloader.DezoomifyGo(r.ctx, uri, dest, args)
 	}
 	return true
 }
