@@ -38,7 +38,11 @@ func BookgetHomeDir() string {
 		if os.PathSeparator == '\\' { // Windows
 			configDir = filepath.Join(home, "bookget")
 		}
-		return filepath.Join(configDir)
+		homeDir := filepath.Join(configDir)
+		if err := os.Mkdir(homeDir, 0755); err != nil && !os.IsExist(err) {
+			return ""
+		}
+		return homeDir
 	}
 	return home
 }
