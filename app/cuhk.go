@@ -93,7 +93,7 @@ func (r *Cuhk) doDezoomifyRs(iiifUrls []string) bool {
 	}
 	referer := url.QueryEscape(r.dt.Url)
 	size := len(iiifUrls)
-	downloader := downloader.NewIIIFDownloader()
+	downloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue

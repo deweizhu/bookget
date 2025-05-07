@@ -179,7 +179,7 @@ func (r *Berlin) doDezoomifyRs(iiifUrls []string) bool {
 	}
 	size := len(iiifUrls)
 	// 创建下载器实例
-	downloader := downloader.NewIIIFDownloader()
+	downloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue

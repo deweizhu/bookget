@@ -14,6 +14,7 @@ const (
 
 	defaultRetry   = 3
 	defaultTimeout = 300 * time.Second
+	defaultQuality = 90
 	defaultFormat  = "full/full/0/default.jpg"
 )
 

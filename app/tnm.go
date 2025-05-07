@@ -81,7 +81,7 @@ func (r *Tnm) do(dziUrls []string) (msg string, err error) {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(dziUrls)
-	downloader := downloader.NewIIIFDownloader()
+	downloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range dziUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue

@@ -87,7 +87,7 @@ func (r DziCnLib) dezoomify() (msg string, err error) {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(r.Canvases)
-	downloader := downloader.NewIIIFDownloader()
+	downloader := downloader.NewIIIFDownloader(&config.Conf)
 	err = downloader.SetDeepZoomTileFormat("{{.ServerURL}}/{{.Level}}/{{.X}}/{{.Y}}.{{.Format}}")
 	if err != nil {
 		return "[err=SetDeepZoomTileFormat]", err

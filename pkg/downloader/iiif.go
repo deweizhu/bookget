@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"bookget/config"
 	"bookget/pkg/progressbar"
 	"bytes"
 	"context"
@@ -12,8 +13,6 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"math"
-	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -27,7 +26,7 @@ import (
 
 /*
 // 创建下载器
-downloader := downloader.NewIIIFDownloader()
+downloader := downloader.NewIIIFDownloader(&config.Conf)
 
 // 自定义 IIIF tileURL 格式
 downloader.SetIIIFTileFormat("{{.ID}}/region/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{.Width}},{{.Height}}/0/default.{{.Format}}")
@@ -115,9 +114,16 @@ type IIIFDownloader struct {
 	// tileURL 格式配置
 	iiifTileFormat     TileURLFormat // IIIF 格式的 tileURL
 	DeepzoomTileFormat TileURLFormat // DeepZoom 格式的 tileURL
+
+	//config.ini传过来
+	userAgent     string
+	fileExtension string
+	maxRetries    int
+	jpgQuality    int
+	maxConcurrent int
 }
 
-func NewIIIFDownloader() *IIIFDownloader {
+func NewIIIFDownloader(c *config.Input) *IIIFDownloader {
 	// 创建自定义 Transport 忽略 SSL 验证
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
@@ -127,7 +133,39 @@ func NewIIIFDownloader() *IIIFDownloader {
 	jar, _ := cookiejar.New(nil)
 
 	dl := &IIIFDownloader{
-		client: &http.Client{Jar: jar, Transport: tr},
+		client:        &http.Client{Jar: jar, Transport: tr},
+		userAgent:     c.UserAgent,
+		fileExtension: ".jpg",
+		maxRetries:    c.Retries,
+		jpgQuality:    c.Quality,
+		maxConcurrent: c.MaxConcurrent,
+	}
+	// 设置默认的 tileURL 格式
+	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{.Width}},{{.Height}}/0/default.{{.Format}}")
+	// 更新模板，在size部分支持 ^ 前缀
+	dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{if .sizeUpscaling}}^{{end}}{{.Width}},{{.Height}}/0/default.{{.Format}}")
+
+	dl.SetDeepZoomTileFormat("{{.ServerURL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
+
+	return dl
+}
+
+func NewIIIFDownloaderDefault() *IIIFDownloader {
+	// 创建自定义 Transport 忽略 SSL 验证
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	jar, _ := cookiejar.New(nil)
+
+	dl := &IIIFDownloader{
+		client:        &http.Client{Jar: jar, Transport: tr},
+		userAgent:     userAgent,
+		fileExtension: ".jpg",
+		maxRetries:    maxRetries,
+		jpgQuality:    JPGQuality,
+		maxConcurrent: maxConcurrent,
 	}
 	// 设置默认的 tileURL 格式
 	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{.Width}},{{.Height}}/0/default.{{.Format}}")
@@ -350,9 +388,9 @@ func (d *IIIFDownloader) downloadAndMergeTiles(ctx context.Context, info *IIIFIn
 	effectiveTileHeight := tileHeight - overlap*2
 
 	finalImg := image.NewRGBA(image.Rect(0, 0, cols*effectiveTileWidth, rows*effectiveTileHeight))
-	progressBar := progressbar.Default(int64(cols*rows), "IIIF")
+	progressBar := progressbar.Default(int64(cols*rows), "downloading tiles")
 
-	sem := make(chan struct{}, maxConcurrent)
+	sem := make(chan struct{}, d.maxConcurrent)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	errChan := make(chan error, 1)
@@ -378,16 +416,16 @@ func (d *IIIFDownloader) downloadAndMergeTiles(ctx context.Context, info *IIIFIn
 					"sizeUpscaling": d.needsUpscale(info, tileWidth, tileHeight),
 				}
 
-				tileURL, err := d.buildIIIFTileURL(tileData)
-				if err != nil {
-					select {
-					case errChan <- fmt.Errorf("构建 tileURL 失败: %v", err):
-					default:
-					}
-					return
-				}
+				//tileURL, err := d.buildIIIFTileURL(tileData)
+				//if err != nil {
+				//	select {
+				//	case errChan <- fmt.Errorf("构建 tileURL 失败: %v", err):
+				//	default:
+				//	}
+				//	return
+				//}
 
-				img, err := d.downloadImage(ctx, tileURL, headers)
+				img, err := d.downloadImageWithRetry(ctx, tileData, headers, d.maxRetries)
 				if err != nil {
 					select {
 					case errChan <- fmt.Errorf("下载拼图(%d,%d)失败: %v", x, y, err):
@@ -449,9 +487,9 @@ func (d *IIIFDownloader) downloadAndMergeXMLTiles(ctx context.Context, info *III
 	rows := (info.Size.Height + effectiveTileSize - 1) / effectiveTileSize
 
 	finalImg := image.NewRGBA(image.Rect(0, 0, info.Size.Width, info.Size.Height))
-	progressBar := progressbar.Default(int64(cols*rows), "IIIF")
+	progressBar := progressbar.Default(int64(cols*rows), "downloading tiles")
 
-	sem := make(chan struct{}, maxConcurrent)
+	sem := make(chan struct{}, d.maxConcurrent)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	errChan := make(chan error, 1)
@@ -555,7 +593,7 @@ func (d *IIIFDownloader) getIIIFInfo(ctx context.Context, serverBaseURL, url str
 	}
 
 	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("User-Agent", d.userAgent)
 	}
 
 	resp, err := d.client.Do(req.WithContext(ctx))
@@ -597,7 +635,7 @@ func (d *IIIFDownloader) getIIIFXMLInfo(ctx context.Context, serverBaseURL, url 
 	}
 
 	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("User-Agent", d.userAgent)
 	}
 
 	resp, err := d.client.Do(req.WithContext(ctx))
@@ -630,120 +668,15 @@ func (d *IIIFDownloader) getIIIFXMLInfo(ctx context.Context, serverBaseURL, url 
 }
 
 func (d *IIIFDownloader) downloadImage(ctx context.Context, url string, headers http.Header) (image.Image, error) {
-	baseDelay := time.Second // 初始延迟1秒
-	var lastErr error
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		if attempt > 0 {
-			// 指数退避: 1s, 2s, 4s
-			delay := time.Duration(math.Pow(2, float64(attempt-1))) * baseDelay
-			select {
-			case <-time.After(delay):
-			case <-ctx.Done():
-				return nil, fmt.Errorf("下载取消: %v", ctx.Err())
-			}
-		}
-
-		// 创建新请求防止Body已关闭等问题
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			lastErr = fmt.Errorf("创建请求失败: %v", err)
-			continue
-		}
-
-		// 设置headers
-		for key, values := range headers {
-			for _, value := range values {
-				req.Header.Add(key, value)
-			}
-		}
-
-		if req.Header.Get("User-Agent") == "" {
-			req.Header.Set("User-Agent", userAgent)
-		}
-
-		// 记录调试信息
-		//fmt.Printf("尝试下载 (第%d次): %s\n", attempt+1, url)
-
-		resp, err := d.client.Do(req.WithContext(ctx))
-		if err != nil {
-			lastErr = fmt.Errorf("请求失败: %v", err)
-			if d.shouldRetry(err) {
-				continue
-			}
-			return nil, lastErr
-		}
-
-		// 检查状态码
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			lastErr = fmt.Errorf("服务器返回错误状态码: %d\n响应体: %s", resp.StatusCode, string(body))
-
-			// 404等错误不应重试
-			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-				return nil, lastErr
-			}
-			continue
-		}
-
-		// 成功读取图像
-		imgData, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			lastErr = fmt.Errorf("读取图像数据失败: %v", err)
-			continue
-		}
-
-		img, _, err := image.Decode(bytes.NewReader(imgData))
-		if err != nil {
-			lastErr = fmt.Errorf("解码图像失败: %v", err)
-			// 可能是损坏的图像数据，重试可能有用
-			continue
-		}
-
-		return img, nil
-	}
-
-	return nil, fmt.Errorf("下载失败(尝试%d次): %v", maxRetries, lastErr)
-}
-
-// 判断错误是否可重试
-func (d *IIIFDownloader) shouldRetry(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// 网络错误可以重试
-	if _, ok := err.(net.Error); ok {
-		return true
-	}
-
-	// 特定错误判断
-	switch {
-	case strings.Contains(err.Error(), "connection reset"),
-		strings.Contains(err.Error(), "broken pipe"),
-		strings.Contains(err.Error(), "timeout"):
-		return true
-	}
-
-	return false
-}
-
-func (d *IIIFDownloader) downloadImage2(ctx context.Context, url string, headers http.Header) (image.Image, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	for key, values := range headers {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
+	req.Header = headers.Clone()
 
 	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("User-Agent", d.userAgent)
 	}
 
 	resp, err := d.client.Do(req.WithContext(ctx))
@@ -753,6 +686,10 @@ func (d *IIIFDownloader) downloadImage2(ctx context.Context, url string, headers
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		//404 || 500
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusInternalServerError {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("服务器返回错误状态码: %d", resp.StatusCode)
 	}
 
@@ -778,7 +715,7 @@ func (d *IIIFDownloader) saveImage(img image.Image, path string) error {
 
 	switch ext := path[len(path)-4:]; ext {
 	case ".jpg", "jpeg":
-		return jpeg.Encode(outFile, img, &jpeg.Options{Quality: 90})
+		return jpeg.Encode(outFile, img, &jpeg.Options{Quality: JPGQuality})
 	case ".png":
 		return png.Encode(outFile, img)
 	default:
@@ -901,4 +838,25 @@ func (d *IIIFDownloader) needsUpscale(info *IIIFInfo, requestW, requestH int) bo
 
 	// 当瓦片尺寸 < 原始尺寸时，表示需要放大
 	return (requestW < info.Width || requestH < info.Height) && supportsUpscaling
+}
+
+// 辅助函数：带重试的下载
+func (d *IIIFDownloader) downloadImageWithRetry(ctx context.Context, tileData map[string]interface{}, headers http.Header, maxRetries int) (image.Image, error) {
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		img, err := func() (image.Image, error) {
+			url, err := d.buildIIIFTileURL(tileData)
+			if err != nil {
+				return nil, err
+			}
+			return d.downloadImage(ctx, url, headers)
+		}()
+
+		if err == nil {
+			return img, nil
+		}
+		lastErr = err
+		time.Sleep(time.Second * time.Duration(i+1))
+	}
+	return nil, lastErr
 }

@@ -116,7 +116,7 @@ func (r *War1931) do(canvases []string) (msg string, err error) {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(canvases)
-	downloader := downloader.NewIIIFDownloader()
+	downloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range canvases {
 		if uri == "" || !config.PageRange(i, size) {
 			continue

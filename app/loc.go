@@ -127,7 +127,7 @@ func (r *Loc) do(imgUrls []string) (msg string, err error) {
 					"Referer":    referer,
 				},
 			}
-			for k := 0; k < config.Conf.Retry; k++ {
+			for k := 0; k < config.Conf.Retries; k++ {
 				_, err := gohttp.FastGet(ctx, imgUrl, opts)
 				if err == nil {
 					break

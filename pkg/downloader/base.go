@@ -6,5 +6,5 @@ const (
 	minFileSize   = 1024 // 最小文件大小(1KB)
 
 	maxRetries = 3
-	JPGQuality = 80
+	JPGQuality = 90
 )

@@ -135,7 +135,7 @@ func (r *Familysearch) do(iiifUrls []string) (msg string, err error) {
 	}
 	size := len(iiifUrls)
 	// 创建下载器实例
-	downloader := downloader.NewIIIFDownloader()
+	downloader := downloader.NewIIIFDownloader(&config.Conf)
 	// 设置固定值
 	downloader.DeepzoomTileFormat.FixedValues = map[string]interface{}{
 		"Level":  12,

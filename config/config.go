@@ -36,7 +36,7 @@ concurrent = 8
 speed = 0
 
 # 下载重试次数
-retry = 3
+retries = 3
 
 [custom]
 # 页面范围，如4:434
@@ -59,6 +59,9 @@ input = ""
 # 使用 IIIF/DeepZoom 拼图下载
 # 0 = 禁用，1=启用
 dzi = 1
+
+#JPG质量
+quality = 80
 
 # IIIF 图像请求 URI: {size}/{rotation}/{quality}.{format}
 format = "full/full/0/default.jpg"
