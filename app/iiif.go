@@ -215,7 +215,12 @@ func (i *IIIF) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", k+1, size, uri)
-		downloader.Dezoomify(i.ctx, uri, dest, args)
+
+		err := downloader.Dezoomify(i.ctx, uri, dest, args)
+		if err != nil {
+			log.Printf("\nDezoomify failed: %s\n", err)
+		}
+
 	}
 	return true
 }
