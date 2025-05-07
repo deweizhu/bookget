@@ -61,3 +61,8 @@ type PageItem struct {
 	ImageID interface{} `json:"imageId"`
 	PageNum interface{} `json:"pageNum"`
 }
+
+type GroupedVolume struct {
+	VolID int
+	Items []DataItem
+}

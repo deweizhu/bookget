@@ -115,15 +115,15 @@ func (s *NlcGuji) Run() (msg string, err error) {
 	}
 
 	var i = 0
-	for _, canvases := range groupedVolumes {
+	for _, item := range groupedVolumes {
 		if !config.VolumeRange(i) {
 			continue
 		}
 		i++
 		vid := fmt.Sprintf("%04d", i)
 		s.savePath = CreateDirectory(s.parsedUrl.Host, s.bookId, vid)
-		log.Printf(" %d/%d volume, %d pages \n", i, len(groupedVolumes), len(canvases))
-		s.letsGo(canvases)
+		log.Printf(" %d/%d volume, %d pages \n", i, len(groupedVolumes), len(item.Items))
+		s.letsGo(item.Items)
 	}
 	return "", nil
 }
@@ -199,7 +199,7 @@ func (s *NlcGuji) getCanvases() (canvases []nlc.DataItem, err error) {
 	return canvases, nil
 }
 
-func (s *NlcGuji) getVolumes() (volumes map[int][]nlc.DataItem, err error) {
+func (s *NlcGuji) getVolumes() (volumes []nlc.GroupedVolume, err error) {
 	if s.responseBody == nil {
 		apiUrl := fmt.Sprintf("https://%s/api/anc/ancImageIdListWithPageNum?metadataId=%s", s.parsedUrl.Host, s.bookId)
 		rawData := []byte("metadataId=" + s.bookId)
@@ -212,9 +212,19 @@ func (s *NlcGuji) getVolumes() (volumes map[int][]nlc.DataItem, err error) {
 	if err = json.Unmarshal(s.responseBody, &resp); err != nil {
 		return volumes, err
 	}
-	volumes = make(map[int][]nlc.DataItem)
+
+	volumes = make([]nlc.GroupedVolume, 0)
+	volId := 0
+	lastStructureId := -1
+
 	for _, item := range resp.Data.ImageIdList {
-		volumes[item.StructureId] = append(volumes[item.StructureId], item)
+		if item.StructureId != lastStructureId {
+			lastStructureId = item.StructureId
+			volumes = append(volumes, nlc.GroupedVolume{VolID: volId, Items: []nlc.DataItem{}})
+			volId++
+		}
+		// 添加到当前分组
+		volumes[len(volumes)-1].Items = append(volumes[len(volumes)-1].Items, item)
 	}
 	return volumes, nil
 }
