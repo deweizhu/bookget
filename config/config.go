@@ -56,14 +56,9 @@ bookmark = 0
 input = ""
 
 [dzi]
-# 使用dezoomify-rs下载，仅对支持iiif的网站生效。
+# 使用 IIIF/DeepZoom 拼图下载
 # 0 = 禁用，1=启用
-dezoomify-rs = 1
-
-# 影响JPEG和PNG编码，可节省磁盘空间。不会提升下载速度。
-# 默认值 --compression=20 表示JPG品质80
-# 最高清图 --compression=0 表示JPG品质100
-dezoomify-rs-args = "-l --compression=20 --timeout=300s --retries=5 --parallelism=2"
+dzi = 1
 
 # IIIF 图像请求 URI: {size}/{rotation}/{quality}.{format}
 format = "full/full/0/default.jpg"
@@ -88,9 +83,8 @@ func CreateConfigIfNotExists(configPath string) error {
 	} else if err != nil {
 		// 其他错误
 		return fmt.Errorf("检查配置文件失败: %w", err)
+	} else {
+		fmt.Printf("配置文件在: %s\n", configPath)
 	}
-	//else {
-	//	fmt.Printf("配置文件在: %s\n", configPath)
-	//}
 	return nil
 }

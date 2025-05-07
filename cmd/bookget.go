@@ -211,6 +211,7 @@ func processURLSet(siteID string, rawUrl string) {
 // readURLFromInput 从用户输入读取URL
 func readURLFromInput() (string, error) {
 	reader := bufio.NewReader(os.Stdin)
+	fmt.Println()
 	fmt.Println("Enter an URL:")
 	fmt.Print("-> ")
 	input, err := reader.ReadString('\n')

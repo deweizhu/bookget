@@ -1,17 +1,11 @@
 package config
 
 import (
-	"os"
 	"strconv"
 	"strings"
 )
 
 var Conf Input
-
-const Version = "25.0506"
-
-// 书签目录版本TXT
-const CatalogVersionInfo = "#版本=1.0"
 
 // initSeq    false = 最小值 <= 当前页码 <=  最大值
 func initSeqRange() {
@@ -42,27 +36,54 @@ func initVolumeRange() {
 	return
 }
 
-func UserHomeDir() string {
-	if os.PathSeparator == '\\' {
-		home := os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
-		if home == "" {
-			home = os.Getenv("USERPROFILE")
+// PageRange    return true (最小值 <= 当前页码 <=  最大值)
+func PageRange(index, size int) bool {
+	//未设置
+	if Conf.SeqStart <= 0 {
+		return true
+	}
+	//结束页负数
+	if Conf.SeqEnd < 0 && (index-size >= Conf.SeqEnd) {
+		return false
+	}
+	//结束页
+	if Conf.SeqEnd > 0 {
+		//结束了
+		if index >= Conf.SeqEnd {
+			return false
 		}
-		return home
+		//起始页
+		if index+1 >= Conf.SeqStart {
+			return true
+		}
+	} else if index+1 >= Conf.SeqStart { //在起始页后
+		return true
 	}
-	return os.Getenv("HOME")
+	return false
 }
 
-func UserTmpDir() string {
-	if os.PathSeparator == '\\' {
-		return UserHomeDir() + "\\AppData\\Roaming\\BookGet\\bookget\\User Data\\"
+// VolumeRange    return true (最小值 <= 当前页码 <=  最大值)
+func VolumeRange(index int) bool {
+	//未设置
+	if Conf.VolStart <= 0 {
+		return true
 	}
-	return UserHomeDir() + "/bookget/"
-}
-
-func CacheDir() string {
-	if os.PathSeparator == '\\' {
-		return UserHomeDir() + "\\AppData\\Roaming\\BookGet\\cache\\"
+	//结束页负数
+	if Conf.VolEnd < 0 && index > Conf.VolStart {
+		return false
 	}
-	return UserHomeDir() + "/bookget/cache"
+	//结束页
+	if Conf.VolEnd > 0 {
+		//结束了
+		if index >= Conf.VolEnd {
+			return false
+		}
+		//起始页
+		if index+1 >= Conf.VolStart {
+			return true
+		}
+	} else if index+1 >= Conf.VolStart { //在起始页后
+		return true
+	}
+	return false
 }

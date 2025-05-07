@@ -68,7 +68,7 @@ func Init(ctx context.Context) bool {
 	flag.StringVar(&Conf.Format, "format", iniConf.Format, "IIIF 图像请求URI: full/full/0/default.jpg")
 	flag.StringVar(&Conf.UserAgent, "user-agent", iniConf.UserAgent, "user-agent")
 	flag.BoolVar(&Conf.Bookmark, "bookmark", iniConf.Bookmark, "只下载书签目录，可选值[0|1]。0=否，1=是。仅对 gj.tianyige.com.cn 有效。")
-	flag.BoolVar(&Conf.UseDzi, "dezoomify", iniConf.UseDzi, "使用dezoomify-rs下载，仅对支持iiif的网站生效。")
+	flag.BoolVar(&Conf.UseDzi, "dzi", iniConf.UseDzi, "使用 IIIF/DeepZoom 拼图下载")
 	flag.StringVar(&Conf.CookieFile, "cookie", iniConf.CookieFile, "指定cookie.txt文件路径")
 	flag.StringVar(&Conf.LocalStorage, "local-storage", iniConf.LocalStorage, "指定localStorage.txt文件路径")
 	flag.StringVar(&Conf.FileExt, "extension", iniConf.FileExt, "指定文件扩展名[.jpg|.tif|.png]等")
@@ -112,35 +112,38 @@ func Init(ctx context.Context) bool {
 	return true
 }
 
-func initINI() (io Input, err error) {
-	dir, _ := os.Getwd()
-	fPath, _ := os.Executable()
+func initINI() (Input, error) {
+
+	// 获取路径相关配置
+	dir, err := os.Getwd()
+	if err != nil {
+		return Input{}, fmt.Errorf("获取当前工作目录失败: %w", err)
+	}
+
+	fPath, err := os.Executable()
+	if err != nil {
+		return Input{}, fmt.Errorf("获取可执行文件路径失败: %w", err)
+	}
 	binDir := filepath.Dir(fPath)
-	var configPath string
-	fi, err := os.Stat("/etc/bookget/config.ini")
-	if string(os.PathSeparator) == "/" && err == nil && fi.Size() > 0 {
-		configPath = "/etc/bookget/config.ini"
-	} else {
-		configPath = binDir + string(os.PathSeparator) + "config.ini"
+
+	// 确定配置文件路径
+	configPath, err := determineConfigPath(binDir)
+	if err != nil {
+		return Input{}, fmt.Errorf("确定配置文件路径失败: %w", err)
 	}
 
+	// 创建配置文件（如果不存在）
 	if err := CreateConfigIfNotExists(configPath); err != nil {
-		fmt.Printf("错误: %v\n", err)
-		os.Exit(1)
+		return Input{}, fmt.Errorf("创建配置文件失败: %w", err)
 	}
 
-	cFile := dir + string(os.PathSeparator) + "cookie.txt"
-	urls := dir + string(os.PathSeparator) + "urls.txt"
-	localStorage := dir + string(os.PathSeparator) + "localStorage.txt"
+	// 初始化默认输入结构
 	c := runtime.NumCPU() * 2
-
-	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0"
-	format := "full/full/0/default.jpg"
-	io = Input{
+	io := Input{
 		DUrl:          "",
-		UrlsFile:      urls,
-		CookieFile:    cFile,
-		LocalStorage:  localStorage,
+		UrlsFile:      filepath.Join(dir, "urls.txt"),
+		CookieFile:    filepath.Join(dir, "cookie.txt"),
+		LocalStorage:  filepath.Join(dir, "localStorage.txt"),
 		Seq:           "",
 		SeqStart:      0,
 		SeqEnd:        0,
@@ -149,66 +152,125 @@ func initINI() (io Input, err error) {
 		VolEnd:        0,
 		Speed:         0,
 		SaveFolder:    dir,
-		Format:        format,
-		UserAgent:     ua,
+		Format:        defaultFormat,
+		UserAgent:     defaultUserAgent,
 		AutoDetect:    0,
 		UseDzi:        true,
-		FileExt:       ".jpg",
+		FileExt:       defaultFileExtension,
 		Threads:       1,
 		MaxConcurrent: c,
-		Retry:         3,
+		Retry:         defaultRetry,
+		Timeout:       defaultTimeout,
 		Bookmark:      false,
 		Help:          false,
 		Version:       false,
 	}
 
+	// 加载并解析配置文件
 	cfg, err := ini.LoadSources(ini.LoadOptions{IgnoreInlineComment: true}, configPath)
 	if err != nil {
-		return
+		return Input{}, fmt.Errorf("加载配置文件失败: %w", err)
 	}
 
-	// 读取自动检测模式
+	// 从配置文件更新配置
+	updateConfigFromINI(cfg, &io, dir, c)
+
+	return io, nil
+}
+
+// updateConfigFromINI 从INI文件更新配置
+func updateConfigFromINI(cfg *ini.File, io *Input, defaultDir string, defaultConcurrency int) {
+	// 自动检测模式
 	io.AutoDetect = cfg.Section("").Key("auto-detect").MustInt(0)
 
-	// 读取输出目录设置
-	io.SaveFolder = cfg.Section("paths").Key("output").String()
-	if io.SaveFolder == "" {
-		io.SaveFolder = dir
-	}
+	// 路径相关配置
+	pathsSection := cfg.Section("paths")
+	io.SaveFolder = pathsSection.Key("output").MustString(defaultDir)
+	io.CookieFile = pathsSection.Key("cookie").MustString(io.CookieFile)
+	io.LocalStorage = pathsSection.Key("local-storage").MustString(io.LocalStorage)
+	io.UrlsFile = pathsSection.Key("input").MustString(io.UrlsFile)
 
-	// 读取cookie和localStorage路径
-	io.CookieFile = cfg.Section("paths").Key("cookie").MustString(cFile)
-	io.LocalStorage = cfg.Section("paths").Key("local-storage").MustString(localStorage)
-
-	// 读取下载相关设置
+	// 下载相关配置
 	secDown := cfg.Section("download")
-	io.FileExt = secDown.Key("extension").String()
-	io.Threads = secDown.Key("threads").MustInt(c)
-	if io.Threads == 0 {
-		io.Threads = c
-	}
-	io.MaxConcurrent = secDown.Key("concurrent").MustInt(c)
-	if io.MaxConcurrent == 0 {
-		io.MaxConcurrent = c
-	}
-	io.Speed = secDown.Key("speed").MustInt(c)
-	io.Retry = secDown.Key("retry").MustInt(3)            // 默认重试3次
-	io.Timeout = secDown.Key("timeout").MustDuration(300) // 默认重试300秒
+	io.FileExt = secDown.Key("extension").MustString(io.FileExt)
+	io.Threads = secDown.Key("threads").MustInt(defaultConcurrency)
+	io.MaxConcurrent = secDown.Key("concurrent").MustInt(defaultConcurrency)
+	io.Speed = secDown.Key("speed").MustInt(io.Speed)
+	io.Retry = secDown.Key("retry").MustInt(io.Retry)
+	io.Timeout = secDown.Key("timeout").MustDuration(io.Timeout)
 
-	// 读取自定义设置
+	// 自定义配置
 	secCus := cfg.Section("custom")
 	io.Seq = secCus.Key("sequence").String()
 	io.Volume = secCus.Key("volume").String()
-	io.Bookmark = secCus.Key("bookmark").MustBool(false)
-	io.UserAgent = secCus.Key("user-agent").MustString(ua)
-	io.UrlsFile = secCus.Key("input").String() // 读取URLs文件路径
+	io.Bookmark = secCus.Key("bookmark").MustBool(io.Bookmark)
+	io.UserAgent = secCus.Key("user-agent").MustString(io.UserAgent)
 
-	// 读取dzi相关设置
+	// DZI相关配置
 	secDzi := cfg.Section("dzi")
-	io.UseDzi = secDzi.Key("dezoomify").MustBool(false)
-	io.Format = secDzi.Key("format").MustString(format)
+	io.UseDzi = secDzi.Key("dzi").MustBool(io.UseDzi)
+	io.Format = secDzi.Key("format").MustString(io.Format)
+}
 
-	return io, nil
+// determineConfigPath 确定配置文件路径（跨平台兼容）
+func determineConfigPath(binDir string) (string, error) {
+	// 定义可能的配置文件位置（按优先级排序）
+	var possiblePaths []string
+
+	// 1. 当前目录下的 config.ini
+	currentDir, err := os.Getwd()
+	if err == nil {
+		possiblePaths = append(possiblePaths, filepath.Join(currentDir, "config.ini"))
+	}
+
+	// 2. 用户主目录下的配置文件
+	if home, err := os.UserHomeDir(); err == nil {
+		// Unix-like: ~/.config/bookget/config.ini
+		// Windows: ~\bookget\config.ini
+		configDir := filepath.Join(home, ".config", "bookget")
+		if string(os.PathSeparator) == "\\" { // Windows
+			configDir = filepath.Join(home, "bookget")
+		}
+		possiblePaths = append(possiblePaths, filepath.Join(configDir, "config.ini"))
+	}
+
+	// 3. 系统级配置文件
+	if string(os.PathSeparator) == "/" { // Unix-like
+		possiblePaths = append(possiblePaths, filepath.Join("/", "etc", "bookget", "config.ini"))
+	} else { // Windows
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			possiblePaths = append(possiblePaths, filepath.Join(appData, "bookget", "config.ini"))
+		}
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			possiblePaths = append(possiblePaths, filepath.Join(localAppData, "bookget", "config.ini"))
+		}
+	}
+
+	// 4. 二进制文件所在目录的配置文件
+	possiblePaths = append(possiblePaths, filepath.Join(binDir, "config.ini"))
+
+	// 检查这些路径中哪个配置文件存在且不为空
+	for _, path := range possiblePaths {
+		if fi, err := os.Stat(path); err == nil && fi.Size() > 0 {
+			return path, nil
+		}
+	}
+
+	// 如果没有找到现有配置文件，返回用户主目录的配置文件路径（将在此处创建）
+	// 如果无法获取用户主目录，则返回二进制目录的路径
+	if home, err := os.UserHomeDir(); err == nil {
+		configDir := filepath.Join(home, ".config", "bookget")
+		if string(os.PathSeparator) == "\\" {
+			configDir = filepath.Join(home, "bookget")
+		}
+
+		// 确保目录存在
+		if err := os.MkdirAll(configDir, 0755); err == nil {
+			return filepath.Join(configDir, "config.ini"), nil
+		}
+	}
+
+	return filepath.Join(binDir, "config.ini"), nil
 }
 
 func printHelp() {

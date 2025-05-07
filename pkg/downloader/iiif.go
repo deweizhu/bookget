@@ -23,7 +23,6 @@ import (
 )
 
 /*
-
 // 创建下载器
 downloader := downloader.NewIIIFDownloader()
 
@@ -32,26 +31,38 @@ downloader.SetIIIFTileFormat("{{.ID}}/region/{{.X}},{{.Y}},{{.Width}},{{.Height}
 
 // 自定义 DeepZoom tileURL 格式
 downloader.SetDeepZoomTileFormat("{{.ServerURL}}/tiles/{{.Level}}/{{.Y}}/{{.X}}.{{.Format}}")
-
-
 */
-
 type IIIFInfo struct {
+	// 公共字段
 	Context  string `json:"@context"`
-	ID       string `json:"@id"`
-	Protocol string `json:"protocol"`
+	Protocol string `json:"protocol,omitempty"` // v2专用
 	Width    int    `json:"width"`
 	Height   int    `json:"height"`
-	Sizes    []struct {
+	Type     string `json:"type,omitempty"`    // v3专用
+	Profile  string `json:"profile,omitempty"` // v3专用
+	ID       string `json:"@id"`               // v2字段
+	Id       string `json:"id"`                // v3字段
+
+	// 兼容性字段
+	Sizes []struct {
 		Width  int `json:"width"`
 		Height int `json:"height"`
-	} `json:"sizes"`
+	} `json:"sizes,omitempty"`
+
 	Tiles []struct {
 		Width        int   `json:"width"`
 		Height       int   `json:"height"`
 		ScaleFactors []int `json:"scaleFactors"`
 		Overlap      int   `json:"overlap,omitempty"`
-	} `json:"tiles"`
+	} `json:"tiles,omitempty"`
+
+	// v3扩展字段
+	ExtraQualities []string `json:"extraQualities,omitempty"`
+	ExtraFormats   []string `json:"extraFormats,omitempty"`
+
+	// 内部计算字段
+	version int // 2或3
+	baseURL string
 }
 
 type IIIFXMLInfo struct {
@@ -149,12 +160,29 @@ func (d *IIIFDownloader) SetDeepZoomTileFormat(format string) error {
 
 // buildIIIFTileURL 根据模板构建 IIIF 格式的 tileURL
 func (d *IIIFDownloader) buildIIIFTileURL(data map[string]interface{}) (string, error) {
+	// 确保有基础URL
+	if _, ok := data["ServerBaseURL"]; !ok {
+		if id, ok := data["ID"].(string); ok {
+			if u, err := url.Parse(id); err == nil {
+				data["ServerBaseURL"] = fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+			}
+		}
+	}
+
 	var buf bytes.Buffer
 	err := d.iiifTileFormat.compiledTemplate.Execute(&buf, data)
 	if err != nil {
-		return "", fmt.Errorf("执行 IIIF tileURL 模板失败: %v", err)
+		return "", err
 	}
-	return buf.String(), nil
+
+	result := buf.String()
+	if !strings.HasPrefix(result, "http") {
+		if base, ok := data["ServerBaseURL"].(string); ok {
+			result = strings.TrimSuffix(base, "/") + "/" + strings.TrimPrefix(result, "/")
+		}
+	}
+
+	return result, nil
 }
 
 // buildDeepZoomTileURL 根据模板构建 DeepZoom 格式的 tileURL
@@ -322,12 +350,14 @@ func (d *IIIFDownloader) downloadAndMergeTiles(ctx context.Context, info *IIIFIn
 
 				// 构建包含重叠区域的请求
 				tileData := map[string]interface{}{
-					"ID":     info.ID,
-					"X":      x * effectiveTileWidth,
-					"Y":      y * effectiveTileHeight,
-					"Width":  tileWidth,
-					"Height": tileHeight,
-					"Format": "jpg",
+					"ID":            info.ID,
+					"ServerBaseURL": info.baseURL,
+					"X":             x * effectiveTileWidth,
+					"Y":             y * effectiveTileHeight,
+					"Width":         tileWidth,
+					"Height":        tileHeight,
+					"Format":        "jpg",
+					"Version":       info.version, // 传递版本信息
 				}
 
 				tileURL, err := d.buildIIIFTileURL(tileData)
@@ -520,16 +550,20 @@ func (d *IIIFDownloader) getIIIFInfo(ctx context.Context, serverBaseURL, url str
 		return nil, fmt.Errorf("服务器返回错误状态码: %d", resp.StatusCode)
 	}
 
-	var info IIIFInfo
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return nil, fmt.Errorf("JSON解析失败: %v", err)
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应体失败: %v", err)
+	}
+	info, err := d.parseIIIFResponse(data)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(info.Tiles) == 0 {
 		return nil, fmt.Errorf("未找到拼图配置信息")
 	}
 
-	return &info, nil
+	return info, nil
 }
 
 func (d *IIIFDownloader) getIIIFXMLInfo(ctx context.Context, serverBaseURL, url string, headers http.Header) (*IIIFXMLInfo, error) {
@@ -711,4 +745,27 @@ func (d *IIIFDownloader) calculateMaxZoomLevel(width, height, tileSize int) int 
 		return 12
 	}
 	return level
+}
+
+func (d *IIIFDownloader) parseIIIFResponse(data []byte) (*IIIFInfo, error) {
+	var info IIIFInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return nil, err
+	}
+
+	// 自动检测版本
+	switch {
+	case strings.Contains(info.Context, "iiif.io/api/image/2/"):
+		info.version = 2
+		info.baseURL = strings.TrimSuffix(info.ID, "/info.json")
+		info.Id = info.ID // 兼容v3字段
+	case strings.Contains(info.Context, "iiif.io/api/image/3/"):
+		info.version = 3
+		info.baseURL = strings.TrimSuffix(info.Id, "/info.json")
+		info.ID = info.Id // 兼容v2字段
+	default:
+		return nil, fmt.Errorf("无法识别的IIIF版本: %s", info.Context)
+	}
+
+	return &info, nil
 }

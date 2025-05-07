@@ -1,6 +1,7 @@
 package version
 
 import (
+	"bookget/config"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -158,9 +159,6 @@ func (c *Checker) writeCache(version string) error {
 }
 
 func getCachePath() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
+	homeDir := config.BookgetHomeDir()
 	return filepath.Join(homeDir, CacheFileName), nil
 }
