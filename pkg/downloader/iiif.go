@@ -40,10 +40,12 @@ type IIIFInfo struct {
 	Protocol string `json:"protocol,omitempty"` // v2专用
 	Width    int    `json:"width"`
 	Height   int    `json:"height"`
-	Type     string `json:"type,omitempty"`    // v3专用
-	Profile  string `json:"profile,omitempty"` // v3专用
-	ID       string `json:"@id"`               // v2字段
-	Id       string `json:"id"`                // v3字段
+	Type     string `json:"type,omitempty"` // v3专用
+	ID       string `json:"@id"`            // v2字段
+	Id       string `json:"id"`             // v3字段
+
+	// 使用自定义类型处理profile字段
+	Profile ProfileUnion `json:"profile"`
 
 	// 兼容性字段
 	Sizes []struct {
@@ -66,6 +68,56 @@ type IIIFInfo struct {
 	// 内部计算字段
 	version int // 2或3
 	baseURL string
+}
+
+// 自定义类型处理两种可能的profile格式
+type ProfileUnion struct {
+	Simple  string
+	Complex []interface{}
+}
+
+// 实现UnmarshalJSON接口
+func (p *ProfileUnion) UnmarshalJSON(data []byte) error {
+	// 尝试解析为字符串
+	if err := json.Unmarshal(data, &p.Simple); err == nil {
+		return nil
+	}
+
+	// 尝试解析为数组
+	return json.Unmarshal(data, &p.Complex)
+}
+
+// 获取合规级别URI
+func (p *ProfileUnion) GetCompliance() string {
+	if p.Simple != "" {
+		return p.Simple
+	}
+	if len(p.Complex) > 0 {
+		if uri, ok := p.Complex[0].(string); ok {
+			return uri
+		}
+	}
+	return ""
+}
+
+// 获取支持的功能列表
+func (p *ProfileUnion) GetFeatures() map[string][]string {
+	result := make(map[string][]string)
+
+	if len(p.Complex) > 1 {
+		if features, ok := p.Complex[1].(map[string]interface{}); ok {
+			for key, value := range features {
+				if items, ok := value.([]interface{}); ok {
+					var list []string
+					for _, item := range items {
+						list = append(list, fmt.Sprint(item))
+					}
+					result[key] = list
+				}
+			}
+		}
+	}
+	return result
 }
 
 type IIIFXMLInfo struct {
