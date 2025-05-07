@@ -55,7 +55,8 @@ func (r *LodNLGoKr) Run(sUrl string) (msg string, err error) {
 	//r.apiUrl = "https://viewer.nl.go.kr"
 	webUrl := r.apiUrl + "/nlmivs/viewWonmun_js.jsp?card_class=L&cno=" + r.dt.BookId
 	//AppData\Roaming\BookGet\bookget\User Data\
-	r.tmpFile = config.UserHomeDir() + "\\AppData\\Roaming\\BookGet\\bookget\\User Data\\tmp.html"
+	r.tmpFile = config.UserHomeDir() + "\\bookget\\tmp.html"
+	os.Remove(r.tmpFile)
 	OpenWebBrowser(webUrl, []string{"-o", "tmp.html"})
 	return r.download()
 }
@@ -75,9 +76,9 @@ func (r *LodNLGoKr) getBookId(sUrl string) (bookId string) {
 
 func (r *LodNLGoKr) download() (msg string, err error) {
 	for i := 0; i < 60; i++ {
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 10)
 		bs, err := os.ReadFile(r.tmpFile)
-		if bs == nil || err != nil {
+		if bs == nil || err != nil || len(bs) < 1024*10 {
 			continue
 		}
 		r.PageBody = string(bs)
