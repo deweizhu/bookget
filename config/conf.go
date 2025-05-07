@@ -77,6 +77,7 @@ func Init(ctx context.Context) bool {
 	flag.IntVar(&Conf.MaxConcurrent, "concurrent", iniConf.MaxConcurrent, "最大并发任务数")
 	flag.IntVar(&Conf.Speed, "speed", iniConf.Speed, "下载限速 N 秒/任务，cuhk推荐5-60")
 	flag.IntVar(&Conf.Retries, "retries", iniConf.Retries, "下载重试次数")
+	flag.IntVar(&Conf.Quality, "quality", iniConf.Quality, "下载重试次数")
 	flag.DurationVar(&Conf.Timeout, "timeout", iniConf.Timeout, "下载重试次数")
 	flag.IntVar(&Conf.AutoDetect, "auto-detect", iniConf.AutoDetect, "自动检测下载URL。可选值[0|1|2]，;0=默认;\n1=通用批量下载（类似IDM、迅雷）;\n2= IIIF manifest.json 自动检测下载图片")
 	flag.BoolVar(&Conf.Help, "help", false, "显示帮助")
@@ -161,6 +162,7 @@ func initINI() (Input, error) {
 		Threads:       1,
 		MaxConcurrent: c,
 		Retries:       defaultRetry,
+		Quality:       defaultQuality,
 		Timeout:       defaultTimeout,
 		Bookmark:      false,
 		Help:          false,
@@ -210,7 +212,7 @@ func updateConfigFromINI(cfg *ini.File, io *Input, defaultDir string, defaultCon
 	// DZI相关配置
 	secDzi := cfg.Section("dzi")
 	io.UseDzi = secDzi.Key("dzi").MustBool(io.UseDzi)
-	io.Quality = secDown.Key("quality").MustInt(defaultQuality)
+	io.Quality = secDzi.Key("quality").MustInt(defaultQuality)
 	io.Format = secDzi.Key("format").MustString(io.Format)
 }
 

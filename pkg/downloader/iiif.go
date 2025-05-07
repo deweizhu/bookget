@@ -546,7 +546,7 @@ func (d *IIIFDownloader) downloadAndMergeXMLTiles(ctx context.Context, info *III
 	var mu sync.Mutex
 	errChan := make(chan error, 1)
 
-	maxLevel := d.getMaxZoomLevel(info.Size.Width, info.Size.Height, tileSize)
+	maxLevel := d.getMaxZoomLevel(info.Size.Width, info.Size.Height)
 
 	for y := 0; y < rows; y++ {
 		for x := 0; x < cols; x++ {
@@ -767,7 +767,7 @@ func (d *IIIFDownloader) saveImage(img image.Image, path string) error {
 
 	switch ext := path[len(path)-4:]; ext {
 	case ".jpg", "jpeg":
-		return jpeg.Encode(outFile, img, &jpeg.Options{Quality: JPGQuality})
+		return jpeg.Encode(outFile, img, &jpeg.Options{Quality: d.jpgQuality})
 	case ".png":
 		return png.Encode(outFile, img)
 	default:
@@ -829,12 +829,25 @@ func (d *IIIFDownloader) getImagePathFromXMLURL(xmlURL string) (string, error) {
 	return path, nil
 }
 
-func (d *IIIFDownloader) getMaxZoomLevel(width, height, tileSize int) int {
+func (d *IIIFDownloader) getMaxZoomLevel(width, height int) int {
+	// 1. 取最长边
 	maxDim := width
 	if height > maxDim {
 		maxDim = height
 	}
-	return 12
+
+	// 2. 计算 log2(maxDim) 并向上取整
+	level := 0
+	for dim := 1; dim < maxDim; dim *= 2 {
+		level++
+	}
+
+	// 3. 确保 level 最小为 0（即使是 1x1 图像）
+	if level < 0 {
+		level = 0
+	}
+
+	return level
 }
 
 func (d *IIIFDownloader) calculateMaxZoomLevel(width, height, tileSize int) int {

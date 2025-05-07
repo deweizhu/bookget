@@ -160,7 +160,7 @@ func (r DziCnLib) getCanvases(apiUrl string, jar *cookiejar.Jar) (map[int]string
 		if err != nil {
 			return nil, err
 		}
-		serverUrl := fmt.Sprintf("%s/tiles/%s/", r.ServerUrl, key)
+		serverUrl := fmt.Sprintf("%s/tiles/%s", r.ServerUrl, key)
 		// 有些不规范的JPG/jpg扩展名服务器
 		// http://zggj.jslib.org.cn/medias/0118816-0002//tiles/infos.json
 		// https://guji.sclib.cn/medias/557/tiles/infos.json

@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -102,12 +103,28 @@ func (s *NlcGuji) Run() (msg string, err error) {
 	//先生成书签目录
 	s.buildCatalog(s.savePath + "catalog.txt")
 
-	canvases, err := s.getCanvases()
-	if err != nil || canvases == nil {
-		return "[err=getCanvases]", err
+	groupedVolumes, err := s.getVolumes()
+	if err != nil || groupedVolumes == nil {
+		return "[err=getVolumes]", err
 
 	}
-	s.letsGo(canvases)
+
+	if err != nil {
+		fmt.Println(err)
+		return "getVolumes", err
+	}
+
+	var i = 0
+	for _, canvases := range groupedVolumes {
+		if !config.VolumeRange(i) {
+			continue
+		}
+		i++
+		vid := fmt.Sprintf("%04d", i)
+		s.savePath = CreateDirectory(s.parsedUrl.Host, s.bookId, vid)
+		log.Printf(" %d/%d volume, %d pages \n", i, len(groupedVolumes), len(canvases))
+		s.letsGo(canvases)
+	}
 	return "", nil
 }
 
@@ -180,6 +197,26 @@ func (s *NlcGuji) getCanvases() (canvases []nlc.DataItem, err error) {
 		canvases = append(canvases, item)
 	}
 	return canvases, nil
+}
+
+func (s *NlcGuji) getVolumes() (volumes map[int][]nlc.DataItem, err error) {
+	if s.responseBody == nil {
+		apiUrl := fmt.Sprintf("https://%s/api/anc/ancImageIdListWithPageNum?metadataId=%s", s.parsedUrl.Host, s.bookId)
+		rawData := []byte("metadataId=" + s.bookId)
+		s.responseBody, err = s.postBody(apiUrl, rawData)
+		if err != nil {
+			return volumes, err
+		}
+	}
+	resp := new(nlc.BaseResponse)
+	if err = json.Unmarshal(s.responseBody, &resp); err != nil {
+		return volumes, err
+	}
+	volumes = make(map[int][]nlc.DataItem)
+	for _, item := range resp.Data.ImageIdList {
+		volumes[item.StructureId] = append(volumes[item.StructureId], item)
+	}
+	return volumes, nil
 }
 
 func (s *NlcGuji) getBody(sUrl string) ([]byte, error) {
@@ -330,4 +367,50 @@ func processItem(item *nlc.CatalogItem, idToPage map[int]string, catalog *[]stri
 	for _, child := range item.Children {
 		processItem(&child, idToPage, catalog, prefix+"\t")
 	}
+}
+
+// 按 StructureId 分组
+func (s *NlcGuji) groupByStructureID(items []nlc.DataItem) map[int][]nlc.DataItem {
+	groups := make(map[int][]nlc.DataItem)
+	for _, item := range items {
+		groups[item.StructureId] = append(groups[item.StructureId], item)
+	}
+	return groups
+}
+
+// 方案1：按 StructureId 升序排列
+func (s *NlcGuji) sortGroupsByStructureID(groups map[int][]nlc.DataItem) []nlc.DataItem {
+	// 提取所有 StructureId 并排序
+	var structureIDs []int
+	for id := range groups {
+		structureIDs = append(structureIDs, id)
+	}
+	sort.Ints(structureIDs)
+
+	// 按排序后的 StructureId 合并数据
+	var sortedItems []nlc.DataItem
+	for _, id := range structureIDs {
+		sortedItems = append(sortedItems, groups[id]...)
+	}
+	return sortedItems
+}
+
+// 方案2：按 PageNum 升序排列（每组内部排序）​
+func (s *NlcGuji) sortGroupsByPageNum(groups map[int][]nlc.DataItem) []nlc.DataItem {
+	var structureIDs []int
+	for id := range groups {
+		structureIDs = append(structureIDs, id)
+	}
+	sort.Ints(structureIDs)
+
+	var sortedItems []nlc.DataItem
+	for _, id := range structureIDs {
+		group := groups[id]
+		// 对每组按 PageNum 排序
+		sort.Slice(group, func(i, j int) bool {
+			return group[i].PageNum < group[j].PageNum
+		})
+		sortedItems = append(sortedItems, group...)
+	}
+	return sortedItems
 }

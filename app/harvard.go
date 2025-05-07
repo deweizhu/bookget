@@ -278,7 +278,7 @@ func (r *Harvard) doNormal(imgUrls []string) bool {
 				"User-Agent": config.Conf.UserAgent,
 			},
 		}
-		for k := 0; k < 10; k++ {
+		for k := 0; k < config.Conf.Retries; k++ {
 			resp, err := gohttp.FastGet(ctx, uri, opts)
 			if err == nil && resp.GetStatusCode() == 200 {
 				break
