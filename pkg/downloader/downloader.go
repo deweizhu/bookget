@@ -308,7 +308,7 @@ func (task *DownloadTask) multiThreadDownload(ctx context.Context, dm *DownloadM
 
 			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 				errOnce.Do(func() {
-					firstErr = fmt.Errorf("服务器返回错误状态码: %d", resp.StatusCode)
+					firstErr = fmt.Errorf("服务器返回错误状态码: %s", resp.Status)
 				})
 				return
 			}
@@ -367,7 +367,7 @@ func (task *DownloadTask) singleThreadDownload(ctx context.Context, dm *Download
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("服务器返回错误状态码: %d", resp.StatusCode)
+		return fmt.Errorf("服务器返回错误状态码: %s", resp.Status)
 	}
 
 	buf := make([]byte, 32*1024)
@@ -441,7 +441,7 @@ func (task *DownloadTask) getFileInfo(ctx context.Context) error {
 	}
 
 	if resp.StatusCode != expectedStatus {
-		return fmt.Errorf("服务器返回错误状态码: %d", resp.StatusCode)
+		return fmt.Errorf("服务器返回错误状态码: %s", resp.Status)
 	}
 
 	// 处理分块传输的情况
