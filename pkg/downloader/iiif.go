@@ -84,13 +84,14 @@ type IIIFXMLInfo struct {
 		Width  int `xml:"Width,attr"`
 		Height int `xml:"Height,attr"`
 	} `xml:"Size"`
-	ServerURL string `xml:"Url,attr"`
+	URL string `xml:"Url,attr"`
 }
 
 // TileURLFormat 定义 tileURL 的格式配置
 type TileURLFormat struct {
 	// 模板字符串，支持 Go 模板语法
-	// 可用变量: .ServerURL, .ID, .Level, .X, .Y, .Format, .Width, .Height
+	// 可用变量: .ID, .Level, .X, .Y, .Format, .Width, .Height
+	// 可用变量: .ServerURL,.URL, ==.ID
 	Template string
 
 	// 预编译的模板
@@ -159,7 +160,7 @@ func NewIIIFDownloader(c *config.Input) *IIIFDownloader {
 
 	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{if .sizeUpscaling}}^{{end}}{{.Width}},{{.Height}}/0/default.{{.Format}}")
 
-	dl.SetDeepZoomTileFormat("{{.ServerURL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
+	dl.SetDeepZoomTileFormat("{{.URL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
 
 	return dl
 }
@@ -195,7 +196,7 @@ func NewIIIFDownloaderDefault() *IIIFDownloader {
 	// 更新模板，在size部分支持 ^ 前缀
 	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{if .sizeUpscaling}}^{{end}}{{.Width}},{{.Height}}/0/default.{{.Format}}")
 
-	dl.SetDeepZoomTileFormat("{{.ServerURL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
+	dl.SetDeepZoomTileFormat("{{.URL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
 
 	return dl
 }
@@ -231,59 +232,19 @@ func (d *IIIFDownloader) Dezoomify(ctx context.Context, infoURL string, outputPa
 	if err != nil {
 		return fmt.Errorf("转换header失败: %v", err)
 	}
-
-	info, err := d.getIIIFInfoByURL(ctx, "", infoURL, headers)
+	// 1. 获取IIIF信息（自动检测版本）
+	info, err := d.getIIIFInfoByURL(ctx, infoURL, headers)
 	if err != nil {
 		return fmt.Errorf("获取图像信息失败: %v", err)
 	}
 
-	var finalImg image.Image
-	switch v := info.(type) {
-	case *IIIFInfo:
-		finalImg, err = d.downloadAndMergeTiles(ctx, v, headers)
-	case *IIIFXMLInfo:
-		finalImg, err = d.downloadAndMergeXMLTiles(ctx, v, headers)
-	default:
-		return fmt.Errorf("未知的图像信息格式")
-	}
-
+	// 2. 自动选择v2/v3下载器
+	finalImg, err := d.DownloadTiles(ctx, info, headers)
 	if err != nil {
 		return fmt.Errorf("处理拼图失败: %v", err)
 	}
 
-	if err := d.saveImage(finalImg, outputPath); err != nil {
-		return fmt.Errorf("保存图像失败: %v", err)
-	}
-
-	fmt.Printf("\n图像合并完成，已保存到 %s\n", outputPath)
-	return nil
-}
-
-func (d *IIIFDownloader) DezoomifyWithServer(ctx context.Context, serverBaseURL, xmlURL string, outputPath string, args []string) error {
-	headers, err := d.argsToHeaders(args)
-	if err != nil {
-		return fmt.Errorf("转换header失败: %v", err)
-	}
-
-	info, err := d.getIIIFInfoByURL(ctx, serverBaseURL, xmlURL, headers)
-	if err != nil {
-		return fmt.Errorf("获取图像信息失败: %v", err)
-	}
-
-	var finalImg image.Image
-	switch v := info.(type) {
-	case *IIIFInfo:
-		finalImg, err = d.downloadAndMergeTiles(ctx, v, headers)
-	case *IIIFXMLInfo:
-		finalImg, err = d.downloadAndMergeXMLTiles(ctx, v, headers)
-	default:
-		return fmt.Errorf("未知的图像信息格式")
-	}
-
-	if err != nil {
-		return fmt.Errorf("处理拼图失败: %v", err)
-	}
-
+	// 3. 保存图像
 	if err := d.saveImage(finalImg, outputPath); err != nil {
 		return fmt.Errorf("保存图像失败: %v", err)
 	}
@@ -307,7 +268,7 @@ func (d *IIIFDownloader) DezoomifyWithContent(ctx context.Context, content strin
 			return fmt.Errorf("JSON内容中未找到拼图配置信息")
 		}
 
-		finalImg, err := d.downloadAndMergeTiles(ctx, &jsonInfo, headers)
+		finalImg, err := d.DownloadTiles(ctx, &jsonInfo, headers)
 		if err != nil {
 			return fmt.Errorf("处理拼图失败: %v", err)
 		}
@@ -329,7 +290,135 @@ func (d *IIIFDownloader) DezoomifyWithContent(ctx context.Context, content strin
 	return fmt.Errorf("内容既不是有效的JSON也不是有效的XML")
 }
 
-func (d *IIIFDownloader) downloadAndMergeTiles(ctx context.Context, info *IIIFInfo, headers http.Header) (image.Image, error) {
+func (d *IIIFDownloader) DownloadTiles(ctx context.Context, info interface{}, headers http.Header) (image.Image, error) {
+	switch v := info.(type) {
+	case *IIIFInfo:
+		if v.version == 2 {
+			return d.downloadIIIFv2Tiles(ctx, v, headers)
+		}
+		return d.downloadIIIFv3Tiles(ctx, v, headers)
+	case *IIIFXMLInfo:
+		return d.downloadAndMergeXMLTiles(ctx, v, headers)
+	default:
+		return nil, fmt.Errorf("unsupported info format")
+	}
+}
+
+// IIIF v2 专用下载函数
+func (d *IIIFDownloader) downloadIIIFv2Tiles(ctx context.Context, info *IIIFInfo, headers http.Header) (image.Image, error) {
+	tileConfig := info.Tiles[0]
+	tileSize := tileConfig.Width // v2通常使用正方形瓦片
+	overlap := tileConfig.Overlap
+	effectiveTileSize := tileSize - overlap*2
+
+	cols := int(math.Ceil(float64(info.Width) / float64(effectiveTileSize)))
+	rows := int(math.Ceil(float64(info.Height) / float64(effectiveTileSize)))
+
+	finalImg := image.NewRGBA(image.Rect(0, 0, info.Width, info.Height))
+	progressBar := progressbar.Default(int64(cols*rows), "downloading tiles")
+
+	sem := make(chan struct{}, d.maxConcurrent)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	errChan := make(chan error, 1)
+
+	quality := d.bestQuality(info)
+	format := d.bestFormat(info)
+	sizeFormat := d.preferredSizeFormat(info)
+
+	for y := 0; y < rows; y++ {
+		for x := 0; x < cols; x++ {
+			wg.Add(1)
+			go func(x, y int) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				tileX := x * effectiveTileSize
+				tileY := y * effectiveTileSize
+				reqWidth := tileSize
+				reqHeight := tileSize
+
+				if tileX+reqWidth > info.Width {
+					reqWidth = info.Width - tileX
+				}
+				if tileY+reqHeight > info.Height {
+					reqHeight = info.Height - tileY
+				}
+
+				tileData := map[string]interface{}{
+					"ID":            info.ID, // v2使用ID字段
+					"ServerBaseURL": info.baseURL,
+					"X":             tileX,
+					"Y":             tileY,
+					"Width":         reqWidth,
+					"Height":        reqHeight,
+					//"Format":        "jpg",
+					//"Quality":       "default",
+					"Format":     format,
+					"Quality":    quality,
+					"SizeFormat": sizeFormat,
+					"Version":    2, // 明确使用v2版本
+				}
+				// 构建完整的瓦片URL
+				tileURL, err := d.buildIIIFv3TileURL(tileData)
+				if err != nil {
+					select {
+					case errChan <- fmt.Errorf("build tile URL error: %v", err):
+					default:
+					}
+					return
+				}
+
+				img, err := d.downloadImageWithRetry(ctx, tileURL, headers, d.maxRetries)
+				if err != nil {
+					select {
+					case errChan <- fmt.Errorf("tile(%d,%d)下载失败: %v", x, y, err):
+					default:
+					}
+					return
+				}
+
+				mu.Lock()
+				destX := tileX
+				destY := tileY
+				if x > 0 {
+					destX += overlap
+				}
+				if y > 0 {
+					destY += overlap
+				}
+
+				bounds := img.Bounds()
+				for py := bounds.Min.Y; py < bounds.Max.Y; py++ {
+					for px := bounds.Min.X; px < bounds.Max.X; px++ {
+						targetX := destX + (px - bounds.Min.X)
+						targetY := destY + (py - bounds.Min.Y)
+						if targetX < info.Width && targetY < info.Height {
+							finalImg.Set(targetX, targetY, img.At(px, py))
+						}
+					}
+				}
+				mu.Unlock()
+
+				progressBar.Add(1)
+			}(x, y)
+		}
+	}
+
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	if err := <-errChan; err != nil {
+		return nil, err
+	}
+
+	return finalImg, nil
+}
+
+func (d *IIIFDownloader) downloadIIIFv3Tiles(ctx context.Context, info *IIIFInfo, headers http.Header) (image.Image, error) {
 	if len(info.Tiles) == 0 {
 		return nil, fmt.Errorf("no tile configuration found")
 	}
@@ -373,7 +462,7 @@ func (d *IIIFDownloader) downloadAndMergeTiles(ctx context.Context, info *IIIFIn
 				width := min(tileSize.x, info.Width-posX)
 				height := min(tileSize.y, info.Height-posY)
 
-				// 8构建瓦片URL参数
+				// 构建瓦片URL参数
 				tileData := map[string]interface{}{
 					"ID":         info.ID,
 					"X":          posX,
@@ -383,17 +472,12 @@ func (d *IIIFDownloader) downloadAndMergeTiles(ctx context.Context, info *IIIFIn
 					"Format":     format,
 					"Quality":    quality,
 					"SizeFormat": sizeFormat,
+					"Version":    3, // 明确使用v3版本
 					//"sizeUpscaling": d.needsUpscale(info, width, height),
 				}
 
 				// 构建完整的瓦片URL
-				var tileURL string
-				var err error
-				if info.version == 3 {
-					tileURL, err = d.buildIIIFv3TileURL(tileData)
-				} else {
-					tileURL, err = d.buildIIIFv2TileURL(tileData)
-				}
+				tileURL, err := d.buildIIIFv3TileURL(tileData)
 				if err != nil {
 					select {
 					case errChan <- fmt.Errorf("build tile URL error: %v", err):
@@ -477,13 +561,13 @@ func (d *IIIFDownloader) downloadAndMergeXMLTiles(ctx context.Context, info *III
 
 				// 构建包含重叠区域的请求
 				tileData := map[string]interface{}{
-					"ServerURL": info.ServerURL,
-					"Level":     maxLevel,
-					"X":         x,
-					"Y":         y,
-					"Width":     tileSize, // 请求包含重叠的完整瓦片
-					"Height":    tileSize,
-					"Format":    info.Format,
+					"URL":    info.URL,
+					"Level":  maxLevel,
+					"X":      x,
+					"Y":      y,
+					"Width":  tileSize, // 请求包含重叠的完整瓦片
+					"Height": tileSize,
+					"Format": info.Format,
 				}
 
 				tileURL, err := d.buildDeepZoomTileURL(tileData)
@@ -547,7 +631,7 @@ func (d *IIIFDownloader) downloadAndMergeXMLTiles(ctx context.Context, info *III
 	return finalImg, nil
 }
 
-func (d *IIIFDownloader) getIIIFInfo(ctx context.Context, serverBaseURL, url string, headers http.Header) (*IIIFInfo, error) {
+func (d *IIIFDownloader) getIIIFInfo(ctx context.Context, url string, headers http.Header) (*IIIFInfo, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -589,7 +673,7 @@ func (d *IIIFDownloader) getIIIFInfo(ctx context.Context, serverBaseURL, url str
 	return info, nil
 }
 
-func (d *IIIFDownloader) getIIIFXMLInfo(ctx context.Context, serverBaseURL, url string, headers http.Header) (*IIIFXMLInfo, error) {
+func (d *IIIFDownloader) getIIIFXMLInfo(ctx context.Context, url string, headers http.Header) (*IIIFXMLInfo, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -629,7 +713,7 @@ func (d *IIIFDownloader) getIIIFXMLInfo(ctx context.Context, serverBaseURL, url 
 	if err != nil {
 		return nil, err
 	}
-	info.ServerURL = serverBaseURL + "/" + imagePath
+	info.URL = imagePath
 
 	return &info, nil
 }
@@ -711,20 +795,20 @@ func (d *IIIFDownloader) argsToHeaders(args []string) (http.Header, error) {
 	return headers, nil
 }
 
-func (d *IIIFDownloader) getIIIFInfoByURL(ctx context.Context, serverBaseURL, url string, headers http.Header) (interface{}, error) {
+func (d *IIIFDownloader) getIIIFInfoByURL(ctx context.Context, url string, headers http.Header) (interface{}, error) {
 	ext := strings.ToLower(filepath.Ext(url))
 
 	switch ext {
 	case ".json":
-		return d.getIIIFInfo(ctx, serverBaseURL, url, headers)
+		return d.getIIIFInfo(ctx, url, headers)
 	case ".xml":
-		return d.getIIIFXMLInfo(ctx, serverBaseURL, url, headers)
+		return d.getIIIFXMLInfo(ctx, url, headers)
 	default:
-		info, err := d.getIIIFInfo(ctx, serverBaseURL, url, headers)
+		info, err := d.getIIIFInfo(ctx, url, headers)
 		if err == nil {
 			return info, nil
 		}
-		return d.getIIIFXMLInfo(ctx, serverBaseURL, url, headers)
+		return d.getIIIFXMLInfo(ctx, url, headers)
 	}
 }
 
