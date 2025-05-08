@@ -13,39 +13,36 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"text/template"
 	"time"
 )
 
-/*
-// 创建下载器
-downloader := downloader.NewIIIFDownloader(&config.Conf)
+// TileSizeFormat defines how tile sizes should be formatted in URLs
 
-// 自定义 IIIF tileURL 格式
-downloader.SetIIIFTileFormat("{{.ID}}/region/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{.Width}},{{.Height}}/0/default.{{.Format}}")
-
-// 自定义 DeepZoom tileURL 格式
-downloader.SetDeepZoomTileFormat("{{.ServerURL}}/tiles/{{.Level}}/{{.Y}}/{{.X}}.{{.Format}}")
-*/
 type IIIFInfo struct {
-	// 公共字段
 	Context  string `json:"@context"`
-	Protocol string `json:"protocol,omitempty"` // v2专用
+	Protocol string `json:"protocol,omitempty"` // v2
+	Type     string `json:"type,omitempty"`     // v3
+	ID       string `json:"@id"`                // v2
+	Id       string `json:"id"`                 // v3
 	Width    int    `json:"width"`
 	Height   int    `json:"height"`
-	Type     string `json:"type,omitempty"` // v3专用
-	ID       string `json:"@id"`            // v2字段
-	Id       string `json:"id"`             // v3字段
 
 	// 使用自定义类型处理profile字段
-	Profile ProfileUnion `json:"profile"`
+	// Profile can be string, object, or array
+	Profile json.RawMessage `json:"profile"`
+
+	Qualities []string `json:"qualities,omitempty"`
+	Formats   []string `json:"formats,omitempty"`
 
 	// 兼容性字段
 	Sizes []struct {
@@ -53,71 +50,29 @@ type IIIFInfo struct {
 		Height int `json:"height"`
 	} `json:"sizes,omitempty"`
 
+	// v2 tiles
 	Tiles []struct {
 		Width        int   `json:"width"`
-		Height       int   `json:"height"`
+		Height       int   `json:"height,omitempty"`
 		ScaleFactors []int `json:"scaleFactors"`
 		Overlap      int   `json:"overlap,omitempty"`
 	} `json:"tiles,omitempty"`
 
-	// v3扩展字段
-	ExtraQualities []string `json:"extraQualities,omitempty"`
-	ExtraFormats   []string `json:"extraFormats,omitempty"`
-	ExtraFeatures  []string `json:"extraFeatures,omitempty"`
-
 	// 内部计算字段
-	version int // 2或3
-	baseURL string
+	// Computed fields
+	version  int    // 2 or 3
+	baseURL  string // base URL without info.json
+	maxArea  int64  // from profile
+	maxWidth int    // from profile
 }
 
-// 自定义类型处理两种可能的profile格式
-type ProfileUnion struct {
-	Simple  string
-	Complex []interface{}
-}
-
-// 实现UnmarshalJSON接口
-func (p *ProfileUnion) UnmarshalJSON(data []byte) error {
-	// 尝试解析为字符串
-	if err := json.Unmarshal(data, &p.Simple); err == nil {
-		return nil
-	}
-
-	// 尝试解析为数组
-	return json.Unmarshal(data, &p.Complex)
-}
-
-// 获取合规级别URI
-func (p *ProfileUnion) GetCompliance() string {
-	if p.Simple != "" {
-		return p.Simple
-	}
-	if len(p.Complex) > 0 {
-		if uri, ok := p.Complex[0].(string); ok {
-			return uri
-		}
-	}
-	return ""
-}
-
-// 获取支持的功能列表
-func (p *ProfileUnion) GetFeatures() map[string][]string {
-	result := make(map[string][]string)
-
-	if len(p.Complex) > 1 {
-		if features, ok := p.Complex[1].(map[string]interface{}); ok {
-			for key, value := range features {
-				if items, ok := value.([]interface{}); ok {
-					var list []string
-					for _, item := range items {
-						list = append(list, fmt.Sprint(item))
-					}
-					result[key] = list
-				}
-			}
-		}
-	}
-	return result
+type ProfileInfo struct {
+	Formats   []string `json:"formats,omitempty"`
+	Qualities []string `json:"qualities,omitempty"`
+	Supports  []string `json:"supports,omitempty"`
+	MaxWidth  int      `json:"maxWidth,omitempty"`
+	MaxHeight int      `json:"maxHeight,omitempty"`
+	MaxArea   int64    `json:"maxArea,omitempty"`
 }
 
 type IIIFXMLInfo struct {
@@ -169,7 +124,6 @@ type IIIFDownloader struct {
 
 	//config.ini传过来
 	userAgent     string
-	fileExtension string
 	maxRetries    int
 	jpgQuality    int
 	maxConcurrent int
@@ -187,15 +141,23 @@ func NewIIIFDownloader(c *config.Input) *IIIFDownloader {
 	dl := &IIIFDownloader{
 		client:        &http.Client{Jar: jar, Transport: tr},
 		userAgent:     c.UserAgent,
-		fileExtension: ".jpg",
 		maxRetries:    c.Retries,
 		jpgQuality:    c.Quality,
 		maxConcurrent: c.MaxConcurrent,
 	}
-	// 设置默认的 tileURL 格式
+	// 设置 v2 模板（支持简写尺寸和旧版字段名）
+	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{.Width}},/0/default.{{.Format}}")
+
+	// 或更完整的 v2 格式（包含协议声明）
+	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/full/{{.Width}},/0/default.{{.Format}}")
+
+	// 设置 v3 模板（严格尺寸和新版字段名）
 	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{.Width}},{{.Height}}/0/default.{{.Format}}")
-	// 更新模板，在size部分支持 ^ 前缀
-	dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{if .sizeUpscaling}}^{{end}}{{.Width}},{{.Height}}/0/default.{{.Format}}")
+
+	// 或带区域参数的 v3 格式
+	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/max/{{.Width}},{{.Height}}/0/default.{{.Format}}")
+
+	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{if .sizeUpscaling}}^{{end}}{{.Width}},{{.Height}}/0/default.{{.Format}}")
 
 	dl.SetDeepZoomTileFormat("{{.ServerURL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
 
@@ -214,15 +176,24 @@ func NewIIIFDownloaderDefault() *IIIFDownloader {
 	dl := &IIIFDownloader{
 		client:        &http.Client{Jar: jar, Transport: tr},
 		userAgent:     userAgent,
-		fileExtension: ".jpg",
 		maxRetries:    maxRetries,
 		jpgQuality:    JPGQuality,
 		maxConcurrent: maxConcurrent,
 	}
-	// 设置默认的 tileURL 格式
+	// 设置 v2 模板（支持简写尺寸和旧版字段名）
+	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{.Width}},/0/default.{{.Format}}")
+
+	// 或更完整的 v2 格式（包含协议声明）
+	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/full/{{.Width}},/0/default.{{.Format}}")
+
+	// 设置 v3 模板（严格尺寸和新版字段名）
 	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{.Width}},{{.Height}}/0/default.{{.Format}}")
+
+	// 或带区域参数的 v3 格式
+	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/max/{{.Width}},{{.Height}}/0/default.{{.Format}}")
+
 	// 更新模板，在size部分支持 ^ 前缀
-	dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{if .sizeUpscaling}}^{{end}}{{.Width}},{{.Height}}/0/default.{{.Format}}")
+	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{if .sizeUpscaling}}^{{end}}{{.Width}},{{.Height}}/0/default.{{.Format}}")
 
 	dl.SetDeepZoomTileFormat("{{.ServerURL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
 
@@ -255,63 +226,6 @@ func (d *IIIFDownloader) SetDeepZoomTileFormat(format string) error {
 	return nil
 }
 
-// buildIIIFTileURL 根据模板构建 IIIF 格式的 tileURL
-func (d *IIIFDownloader) buildIIIFTileURL(data map[string]interface{}) (string, error) {
-	// 确保有基础URL
-	if _, ok := data["ServerBaseURL"]; !ok {
-		if id, ok := data["ID"].(string); ok {
-			if u, err := url.Parse(id); err == nil {
-				data["ServerBaseURL"] = fmt.Sprintf("%s://%s", u.Scheme, u.Host)
-			}
-		}
-	}
-
-	// 合并固定值和传入数据
-	mergedData := make(map[string]interface{})
-	for k, v := range data {
-		mergedData[k] = v
-	}
-
-	for k, v := range d.DeepzoomTileFormat.FixedValues {
-		mergedData[k] = v
-	}
-
-	var buf bytes.Buffer
-	err := d.iiifTileFormat.compiledTemplate.Execute(&buf, data)
-	if err != nil {
-		return "", err
-	}
-
-	result := buf.String()
-	if !strings.HasPrefix(result, "http") {
-		if base, ok := data["ServerBaseURL"].(string); ok {
-			result = strings.TrimSuffix(base, "/") + "/" + strings.TrimPrefix(result, "/")
-		}
-	}
-
-	return result, nil
-}
-
-// buildDeepZoomTileURL 根据模板构建 DeepZoom 格式的 tileURL
-func (d *IIIFDownloader) buildDeepZoomTileURL(data map[string]interface{}) (string, error) {
-	// 合并固定值和传入数据
-	mergedData := make(map[string]interface{})
-	for k, v := range data {
-		mergedData[k] = v
-	}
-
-	for k, v := range d.DeepzoomTileFormat.FixedValues {
-		mergedData[k] = v
-	}
-
-	var buf bytes.Buffer
-	err := d.DeepzoomTileFormat.compiledTemplate.Execute(&buf, mergedData)
-	if err != nil {
-		return "", fmt.Errorf("执行 DeepZoom tileURL 模板失败: %v", err)
-	}
-	return buf.String(), nil
-}
-
 func (d *IIIFDownloader) Dezoomify(ctx context.Context, infoURL string, outputPath string, args []string) error {
 	headers, err := d.argsToHeaders(args)
 	if err != nil {
@@ -326,10 +240,7 @@ func (d *IIIFDownloader) Dezoomify(ctx context.Context, infoURL string, outputPa
 	var finalImg image.Image
 	switch v := info.(type) {
 	case *IIIFInfo:
-		tileConfig := v.Tiles[0]
-		cols := (v.Width + tileConfig.Width - 1) / tileConfig.Width
-		rows := (v.Height + tileConfig.Height - 1) / tileConfig.Height
-		finalImg, err = d.downloadAndMergeTiles(ctx, v, cols, rows, headers)
+		finalImg, err = d.downloadAndMergeTiles(ctx, v, headers)
 	case *IIIFXMLInfo:
 		finalImg, err = d.downloadAndMergeXMLTiles(ctx, v, headers)
 	default:
@@ -362,10 +273,7 @@ func (d *IIIFDownloader) DezoomifyWithServer(ctx context.Context, serverBaseURL,
 	var finalImg image.Image
 	switch v := info.(type) {
 	case *IIIFInfo:
-		tileConfig := v.Tiles[0]
-		cols := (v.Width + tileConfig.Width - 1) / tileConfig.Width
-		rows := (v.Height + tileConfig.Height - 1) / tileConfig.Height
-		finalImg, err = d.downloadAndMergeTiles(ctx, v, cols, rows, headers)
+		finalImg, err = d.downloadAndMergeTiles(ctx, v, headers)
 	case *IIIFXMLInfo:
 		finalImg, err = d.downloadAndMergeXMLTiles(ctx, v, headers)
 	default:
@@ -399,11 +307,7 @@ func (d *IIIFDownloader) DezoomifyWithContent(ctx context.Context, content strin
 			return fmt.Errorf("JSON内容中未找到拼图配置信息")
 		}
 
-		tileConfig := jsonInfo.Tiles[0]
-		cols := (jsonInfo.Width + tileConfig.Width - 1) / tileConfig.Width
-		rows := (jsonInfo.Height + tileConfig.Height - 1) / tileConfig.Height
-
-		finalImg, err := d.downloadAndMergeTiles(ctx, &jsonInfo, cols, rows, headers)
+		finalImg, err := d.downloadAndMergeTiles(ctx, &jsonInfo, headers)
 		if err != nil {
 			return fmt.Errorf("处理拼图失败: %v", err)
 		}
@@ -425,21 +329,25 @@ func (d *IIIFDownloader) DezoomifyWithContent(ctx context.Context, content strin
 	return fmt.Errorf("内容既不是有效的JSON也不是有效的XML")
 }
 
-func (d *IIIFDownloader) downloadAndMergeTiles(ctx context.Context, info *IIIFInfo, cols, rows int, headers http.Header) (image.Image, error) {
-	tileConfig := info.Tiles[0]
-	tileWidth := tileConfig.Width
-	tileHeight := tileConfig.Height
-
-	// 从 JSON 中获取 overlap（默认为 0）
-	overlap := 0
-	if len(info.Tiles) > 0 {
-		overlap = info.Tiles[0].Overlap
+func (d *IIIFDownloader) downloadAndMergeTiles(ctx context.Context, info *IIIFInfo, headers http.Header) (image.Image, error) {
+	if len(info.Tiles) == 0 {
+		return nil, fmt.Errorf("no tile configuration found")
 	}
 
-	effectiveTileWidth := tileWidth - overlap*2
-	effectiveTileHeight := tileHeight - overlap*2
+	tileConfig := info.Tiles[0]
+	tileSize := Vec2d{
+		x: tileConfig.Width,
+		y: tileConfig.Height,
+	}
 
-	finalImg := image.NewRGBA(image.Rect(0, 0, cols*effectiveTileWidth, rows*effectiveTileHeight))
+	// Apply size constraints
+	tileSize = d.cropTileSize(info, tileSize)
+
+	// Calculate grid
+	cols := int(math.Ceil(float64(info.Width) / float64(tileSize.x)))
+	rows := int(math.Ceil(float64(info.Height) / float64(tileSize.y)))
+
+	finalImg := image.NewRGBA(image.Rect(0, 0, info.Width, info.Height))
 	progressBar := progressbar.Default(int64(cols*rows), "downloading tiles")
 
 	sem := make(chan struct{}, d.maxConcurrent)
@@ -447,62 +355,69 @@ func (d *IIIFDownloader) downloadAndMergeTiles(ctx context.Context, info *IIIFIn
 	var mu sync.Mutex
 	errChan := make(chan error, 1)
 
+	quality := d.bestQuality(info)
+	format := d.bestFormat(info)
+	sizeFormat := d.preferredSizeFormat(info)
+
 	for y := 0; y < rows; y++ {
 		for x := 0; x < cols; x++ {
 			wg.Add(1)
+
 			go func(x, y int) {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
-				// 构建包含重叠区域的请求
+				posX := x * tileSize.x
+				posY := y * tileSize.y
+				width := min(tileSize.x, info.Width-posX)
+				height := min(tileSize.y, info.Height-posY)
+
+				// 8构建瓦片URL参数
 				tileData := map[string]interface{}{
-					"ID":            info.ID,
-					"ServerBaseURL": info.baseURL,
-					"X":             x * effectiveTileWidth,
-					"Y":             y * effectiveTileHeight,
-					"Width":         tileWidth,
-					"Height":        tileHeight,
-					"Format":        "jpg",
-					"Version":       info.version, // 传递版本信息
-					"sizeUpscaling": d.needsUpscale(info, tileWidth, tileHeight),
+					"ID":         info.ID,
+					"X":          posX,
+					"Y":          posY,
+					"Width":      width,
+					"Height":     height,
+					"Format":     format,
+					"Quality":    quality,
+					"SizeFormat": sizeFormat,
+					//"sizeUpscaling": d.needsUpscale(info, width, height),
 				}
 
-				//tileURL, err := d.buildIIIFTileURL(tileData)
-				//if err != nil {
-				//	select {
-				//	case errChan <- fmt.Errorf("构建 tileURL 失败: %v", err):
-				//	default:
-				//	}
-				//	return
-				//}
-
-				img, err := d.downloadImageWithRetry(ctx, tileData, headers, d.maxRetries)
+				// 构建完整的瓦片URL
+				var tileURL string
+				var err error
+				if info.version == 3 {
+					tileURL, err = d.buildIIIFv3TileURL(tileData)
+				} else {
+					tileURL, err = d.buildIIIFv2TileURL(tileData)
+				}
 				if err != nil {
 					select {
-					case errChan <- fmt.Errorf("下载拼图(%d,%d)失败: %v", x, y, err):
+					case errChan <- fmt.Errorf("build tile URL error: %v", err):
+					default:
+					}
+					return
+				}
+
+				// 下载瓦片图像
+				img, err := d.downloadImageWithRetry(ctx, tileURL, headers, d.maxRetries)
+				if err != nil {
+					select {
+					case errChan <- fmt.Errorf("download tile(%d,%d) error: %v", x, y, err):
 					default:
 					}
 					return
 				}
 
 				mu.Lock()
-				// 计算目标位置（跳过重叠部分）
-				destX := x * effectiveTileWidth
-				destY := y * effectiveTileHeight
-				if x > 0 {
-					destX += overlap
-				}
-				if y > 0 {
-					destY += overlap
-				}
-
-				// 复制有效像素区域
 				bounds := img.Bounds()
 				for py := bounds.Min.Y; py < bounds.Max.Y; py++ {
 					for px := bounds.Min.X; px < bounds.Max.X; px++ {
-						targetX := destX + (px - bounds.Min.X)
-						targetY := destY + (py - bounds.Min.Y)
+						targetX := posX + (px - bounds.Min.X)
+						targetY := posY + (py - bounds.Min.Y)
 						if targetX < info.Width && targetY < info.Height {
 							finalImg.Set(targetX, targetY, img.At(px, py))
 						}
@@ -868,55 +783,176 @@ func (d *IIIFDownloader) calculateMaxZoomLevel(width, height, tileSize int) int 
 	return level
 }
 
+//func (d *IIIFDownloader) needsUpscale(info *IIIFInfo, requestW, requestH int) bool {
+//	// 检查服务是否支持放大
+//	supportsUpscaling := false
+//	for _, feature := range info.ExtraFeatures {
+//		if strings.Contains(feature, "sizeUpscaling") {
+//			supportsUpscaling = true
+//			break
+//		}
+//	}
+//
+//	// 当瓦片尺寸 < 原始尺寸时，表示需要放大
+//	return (requestW < info.Width || requestH < info.Height) && supportsUpscaling
+//}
+
+// 新增
+func (d *IIIFDownloader) parseProfile(profile json.RawMessage) (*ProfileInfo, error) {
+	var info ProfileInfo
+
+	// Try to parse as string (profile reference)
+	var profileRef string
+	if err := json.Unmarshal(profile, &profileRef); err == nil {
+		// TODO: Lookup predefined profile info
+		return &info, nil
+	}
+
+	// Try to parse as ProfileInfo object
+	if err := json.Unmarshal(profile, &info); err == nil {
+		return &info, nil
+	}
+
+	// Try to parse as array of profiles
+	var profiles []json.RawMessage
+	if err := json.Unmarshal(profile, &profiles); err == nil {
+		for _, p := range profiles {
+			pi, err := d.parseProfile(p)
+			if err != nil {
+				continue
+			}
+			// Merge profile info
+			info.Formats = append(info.Formats, pi.Formats...)
+			info.Qualities = append(info.Qualities, pi.Qualities...)
+			info.Supports = append(info.Supports, pi.Supports...)
+			if pi.MaxWidth > 0 && (info.MaxWidth == 0 || pi.MaxWidth < info.MaxWidth) {
+				info.MaxWidth = pi.MaxWidth
+			}
+			if pi.MaxHeight > 0 && (info.MaxHeight == 0 || pi.MaxHeight < info.MaxHeight) {
+				info.MaxHeight = pi.MaxHeight
+			}
+			if pi.MaxArea > 0 && (info.MaxArea == 0 || pi.MaxArea < info.MaxArea) {
+				info.MaxArea = pi.MaxArea
+			}
+		}
+		return &info, nil
+	}
+
+	return &info, nil
+}
+
 func (d *IIIFDownloader) parseIIIFResponse(data []byte) (*IIIFInfo, error) {
 	var info IIIFInfo
 	if err := json.Unmarshal(data, &info); err != nil {
 		return nil, err
 	}
 
-	// 自动检测版本
+	// Detect version and set base URL
 	switch {
 	case strings.Contains(info.Context, "iiif.io/api/image/2/"):
 		info.version = 2
 		info.baseURL = strings.TrimSuffix(info.ID, "/info.json")
-		info.Id = info.ID // 兼容v3字段
+		info.Id = info.ID // Set v3 field
 	case strings.Contains(info.Context, "iiif.io/api/image/3/"):
 		info.version = 3
 		info.baseURL = strings.TrimSuffix(info.Id, "/info.json")
-		info.ID = info.Id // 兼容v2字段
+		info.ID = info.Id // Set v2 field
 	default:
-		return nil, fmt.Errorf("无法识别的IIIF版本: %s", info.Context)
+		// Fallback to v2 if no context
+		if info.Context == "" && info.Protocol == "http://iiif.io/api/image" {
+			info.version = 2
+			info.baseURL = strings.TrimSuffix(info.ID, "/info.json")
+			info.Id = info.ID
+		} else {
+			return nil, fmt.Errorf("unsupported IIIF version")
+		}
+	}
+
+	// Parse profile information
+	if len(info.Profile) > 0 {
+		profile, err := d.parseProfile(info.Profile)
+		if err == nil {
+			info.maxArea = profile.MaxArea
+			info.maxWidth = profile.MaxWidth
+		}
+	}
+
+	// Remove test IDs (like example.com)
+	if matched, _ := regexp.MatchString(`^https?://((www\.)?example\.|localhost)`, info.ID); matched {
+		info.ID = ""
 	}
 
 	return &info, nil
 }
 
-func (d *IIIFDownloader) needsUpscale(info *IIIFInfo, requestW, requestH int) bool {
-	// 检查服务是否支持放大
-	supportsUpscaling := false
-	for _, feature := range info.ExtraFeatures {
-		if strings.Contains(feature, "sizeUpscaling") {
-			supportsUpscaling = true
-			break
+func (d *IIIFDownloader) bestQuality(info *IIIFInfo) string {
+	profile, _ := d.parseProfile(info.Profile)
+	allQualities := append(info.Qualities, profile.Qualities...)
+
+	if len(allQualities) == 0 {
+		return "default"
+	}
+
+	// Find the highest priority quality
+	for _, q := range qualityOrder {
+		for _, qual := range allQualities {
+			if strings.EqualFold(qual, q) {
+				return qual
+			}
 		}
 	}
 
-	// 当瓦片尺寸 < 原始尺寸时，表示需要放大
-	return (requestW < info.Width || requestH < info.Height) && supportsUpscaling
+	return allQualities[0] // Fallback to first if none match
 }
 
-// 辅助函数：带重试的下载
-func (d *IIIFDownloader) downloadImageWithRetry(ctx context.Context, tileData map[string]interface{}, headers http.Header, maxRetries int) (image.Image, error) {
+func (d *IIIFDownloader) bestFormat(info *IIIFInfo) string {
+	profile, _ := d.parseProfile(info.Profile)
+	allFormats := append(info.Formats, profile.Formats...)
+
+	if len(allFormats) == 0 {
+		return "jpg"
+	}
+
+	// Find the highest priority format
+	for _, f := range formatOrder {
+		for _, fmt := range allFormats {
+			if strings.EqualFold(fmt, f) {
+				return fmt
+			}
+		}
+	}
+
+	return allFormats[0] // Fallback to first if none match
+}
+
+func (d *IIIFDownloader) preferredSizeFormat(info *IIIFInfo) TileSizeFormat {
+	profile, _ := d.parseProfile(info.Profile)
+	for _, s := range profile.Supports {
+		if s == "sizeByW" {
+			return Width
+		}
+	}
+	return WidthHeight
+}
+
+func (d *IIIFDownloader) cropTileSize(info *IIIFInfo, size Vec2d) Vec2d {
+	profile, _ := d.parseProfile(info.Profile)
+	if profile.MaxWidth > 0 {
+		size.x = min(size.x, profile.MaxWidth)
+		size.y = min(size.y, profile.MaxHeight)
+	}
+	if profile.MaxArea > 0 && int64(size.x*size.y) > profile.MaxArea {
+		sqrt := int(math.Sqrt(float64(profile.MaxArea)))
+		size.x = min(size.x, sqrt)
+		size.y = min(size.y, sqrt)
+	}
+	return size
+}
+
+func (d *IIIFDownloader) downloadImageWithRetry(ctx context.Context, url string, headers http.Header, maxRetries int) (image.Image, error) {
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
-		img, err := func() (image.Image, error) {
-			url, err := d.buildIIIFTileURL(tileData)
-			if err != nil {
-				return nil, err
-			}
-			return d.downloadImage(ctx, url, headers)
-		}()
-
+		img, err := d.downloadImage(ctx, url, headers)
 		if err == nil {
 			return img, nil
 		}
@@ -924,4 +960,119 @@ func (d *IIIFDownloader) downloadImageWithRetry(ctx context.Context, tileData ma
 		time.Sleep(time.Second * time.Duration(i+1))
 	}
 	return nil, lastErr
+}
+
+// buildDeepZoomTileURL 根据模板构建 DeepZoom 格式的 tileURL
+func (d *IIIFDownloader) buildDeepZoomTileURL(data map[string]interface{}) (string, error) {
+	// 合并固定值和传入数据
+	mergedData := make(map[string]interface{})
+	for k, v := range data {
+		mergedData[k] = v
+	}
+
+	for k, v := range d.DeepzoomTileFormat.FixedValues {
+		mergedData[k] = v
+	}
+
+	var buf bytes.Buffer
+	err := d.DeepzoomTileFormat.compiledTemplate.Execute(&buf, mergedData)
+	if err != nil {
+		return "", fmt.Errorf("执行 DeepZoom tileURL 模板失败: %v", err)
+	}
+	return buf.String(), nil
+}
+
+func (d *IIIFDownloader) buildIIIFv2TileURL(data map[string]interface{}) (string, error) {
+	// 如果设置了自定义模板，优先使用模板
+	if d.iiifTileFormat.compiledTemplate != nil {
+		return d.buildIIIFTileURL(data)
+	}
+
+	// 默认的IIIF v2格式: {id}/{region}/{size}/{rotation}/{quality}.{format}
+	size := fmt.Sprintf("%d,", data["Width"].(int))
+	if format, ok := data["SizeFormat"].(TileSizeFormat); ok && format == WidthHeight {
+		size = fmt.Sprintf("%d,%d", data["Width"].(int), data["Height"].(int))
+	}
+
+	// 确保有必要的字段
+	if _, ok := data["Quality"]; !ok {
+		data["Quality"] = "default"
+	}
+	if _, ok := data["Format"]; !ok {
+		data["Format"] = "jpg"
+	}
+
+	return fmt.Sprintf("%s/%d,%d,%d,%d/%s/0/%s.%s",
+		data["ID"].(string),
+		data["X"].(int),
+		data["Y"].(int),
+		data["Width"].(int),
+		data["Height"].(int),
+		size,
+		data["Quality"].(string),
+		data["Format"].(string),
+	), nil
+}
+
+func (d *IIIFDownloader) buildIIIFv3TileURL(data map[string]interface{}) (string, error) {
+	// 如果设置了自定义模板，优先使用模板
+	if d.iiifTileFormat.compiledTemplate != nil {
+		return d.buildIIIFTileURL(data)
+	}
+
+	// 默认的IIIF v3格式: {id}/{region}/{size}/{rotation}/{quality}.{format}
+	// 确保有必要的字段
+	if _, ok := data["Quality"]; !ok {
+		data["Quality"] = "default"
+	}
+	if _, ok := data["Format"]; !ok {
+		data["Format"] = "jpg"
+	}
+
+	size := fmt.Sprintf("%d,%d", data["Width"].(int), data["Height"].(int))
+	return fmt.Sprintf("%s/%d,%d,%d,%d/%s/0/%s.%s",
+		data["ID"].(string),
+		data["X"].(int),
+		data["Y"].(int),
+		data["Width"].(int),
+		data["Height"].(int),
+		size,
+		data["Quality"].(string),
+		data["Format"].(string),
+	), nil
+}
+
+// 通用的模板构建函数（供v2和v3共用）
+func (d *IIIFDownloader) buildIIIFTileURL(data map[string]interface{}) (string, error) {
+	// 自动填充基础URL（如果未提供）
+	if _, ok := data["ServerBaseURL"]; !ok {
+		if id, ok := data["ID"].(string); ok {
+			if u, err := url.Parse(id); err == nil {
+				data["ServerBaseURL"] = fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+			}
+		}
+	}
+
+	// 确保有必要的字段
+	if _, ok := data["Quality"]; !ok {
+		data["Quality"] = "default"
+	}
+	if _, ok := data["Format"]; !ok {
+		data["Format"] = "jpg"
+	}
+
+	var buf bytes.Buffer
+	if err := d.iiifTileFormat.compiledTemplate.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("模板渲染失败: %v", err)
+	}
+
+	// 确保返回完整URL
+	result := buf.String()
+	if !strings.HasPrefix(result, "http") {
+		if base, ok := data["ServerBaseURL"].(string); ok {
+			result = strings.TrimSuffix(base, "/") + "/" + strings.TrimPrefix(result, "/")
+		}
+	}
+
+	return result, nil
 }

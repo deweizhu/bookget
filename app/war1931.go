@@ -123,23 +123,13 @@ func (r *War1931) do(canvases []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		inputUri := r.dt.SavePath + string(os.PathSeparator) + sortId + "_info.json"
-		bs, err := r.getBody(uri, r.dt.Jar)
-		if err != nil {
-			continue
-		}
-		bsNew := regexp.MustCompile(`profile":\[([^{]+)\{"formats":([^\]]+)\],`).ReplaceAll(bs, []byte(`profile":[{"formats":["jpg"],`))
-		err = os.WriteFile(inputUri, bsNew, os.ModePerm)
-		if err != nil {
-			return "", err
-		}
 		dest := r.dt.SavePath + string(os.PathSeparator) + filename
 		if FileExist(dest) {
 			continue
 		}
 		log.Printf("Get %s  %s\n", sortId, uri)
-		if err := downloader.Dezoomify(r.ctx, inputUri, dest, args); err == nil {
-			os.Remove(inputUri)
+		if err := downloader.Dezoomify(r.ctx, uri, dest, args); err == nil {
+			//os.Remove(inputUri)
 		}
 	}
 	return "", err
