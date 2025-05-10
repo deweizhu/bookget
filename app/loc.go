@@ -4,6 +4,7 @@ import (
 	"bookget/config"
 	"bookget/model/loc"
 	"bookget/pkg/gohttp"
+	"bookget/pkg/sharedmemory"
 	"bookget/pkg/util"
 	"context"
 	"encoding/json"
@@ -13,15 +14,19 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Loc struct {
 	dt         *DownloadTask
 	xmlContent []byte
 	tmpFile    string
+	urlsFile   string
+	bufBuilder strings.Builder
 }
 
 func NewLoc() *Loc {
@@ -62,7 +67,32 @@ func (r *Loc) getBookId(sUrl string) (bookId string) {
 
 func (r *Loc) download() (msg string, err error) {
 	apiUrl := fmt.Sprintf("https://www.loc.gov/item/%s/?fo=json", r.dt.BookId)
-	r.xmlContent, err = r.getBody(apiUrl, r.dt.Jar)
+
+	//windows 处理
+	if os.PathSeparator == '\\' {
+		err = sharedmemory.WriteURLToSharedMemory(apiUrl)
+		if err != nil {
+			fmt.Println("Failed to write to shared memory:", err)
+			return
+		}
+		time.Sleep(time.Second * 10)
+		var html string
+		for i := 0; i < 60; i++ {
+			time.Sleep(time.Second * 3)
+			html, err = sharedmemory.ReadHTMLFromSharedMemory()
+			if err != nil || !strings.Contains(html, "https://tile.loc.gov/image-services/iiif/") {
+				continue
+			}
+			break
+		}
+		// 提取JSON部分
+		start := strings.Index(html, "<pre>") + 5
+		end := strings.Index(html, "</pre>")
+		r.xmlContent = []byte(html[start:end])
+	} else {
+		r.xmlContent, err = r.getBody(apiUrl, r.dt.Jar)
+	}
+
 	if err != nil || r.xmlContent == nil {
 		return "requested URL was not found.", err
 	}
@@ -77,15 +107,28 @@ func (r *Loc) download() (msg string, err error) {
 		if !config.VolumeRange(i) {
 			continue
 		}
-		vid := fmt.Sprintf("%04d", i+1)
-		r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
 		canvases, err := r.getCanvases(vol, r.dt.Jar)
 		if err != nil || canvases == nil {
 			fmt.Println(err)
 			continue
 		}
-		log.Printf(" %d/%d volume, %d pages \n", i+1, len(respVolume), len(canvases))
-		r.do(canvases)
+		if os.PathSeparator != '\\' {
+			vid := fmt.Sprintf("%04d", i+1)
+			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
+			log.Printf(" %d/%d volume, %d pages \n", i+1, len(respVolume), len(canvases))
+			r.do(canvases)
+		}
+	}
+	if os.PathSeparator == '\\' {
+		r.urlsFile = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "") + "urls.txt"
+		os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
+		err = sharedmemory.WriteURLToSharedMemory(r.urlsFile)
+		if err != nil {
+			fmt.Println("Failed to write to shared memory:", err)
+			return
+		}
+		fmt.Println()
+		fmt.Printf("已生成 %s 文件，接下来转到 bookget-gui 中继续工作。 \n", r.urlsFile)
 	}
 	return "", nil
 }
@@ -170,13 +213,15 @@ func (r *Loc) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string, e
 			//每页有6种下载方式
 			imgUrl, ok := r.getImagePage(file)
 			if ok {
+				r.bufBuilder.WriteString(imgUrl)
+				r.bufBuilder.WriteString("\n")
 				canvases = append(canvases, imgUrl)
 			}
 		}
 	}
 	return canvases, nil
 }
-func (r *Loc) getBody(apiUrl string, jar *cookiejar.Jar) ([]byte, error) {
+func (r *Loc) getBody(apiUrl string, jar *cookiejar.Jar) (bs []byte, err error) {
 	referer := r.dt.Url
 	ctx := context.Background()
 	cli := gohttp.NewClient(ctx, gohttp.Options{
@@ -193,7 +238,7 @@ func (r *Loc) getBody(apiUrl string, jar *cookiejar.Jar) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	bs, _ := resp.GetBody()
+	bs, _ = resp.GetBody()
 	if resp.GetStatusCode() != http.StatusOK {
 		return nil, errors.New(fmt.Sprintf("ErrCode:%d, %s", resp.GetStatusCode(), resp.GetReasonPhrase()))
 	}
