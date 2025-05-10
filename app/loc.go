@@ -3,13 +3,14 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/loc"
-	"bookget/pkg/gohttp"
+	"bookget/pkg/downloader"
+	"bookget/pkg/progressbar"
 	"bookget/pkg/sharedmemory"
-	"bookget/pkg/util"
 	"context"
+	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/cookiejar"
@@ -17,56 +18,76 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 )
 
 type Loc struct {
-	dt         *DownloadTask
-	xmlContent []byte
-	tmpFile    string
-	urlsFile   string
-	bufBuilder strings.Builder
+	dm     *downloader.DownloadManager
+	ctx    context.Context
+	cancel context.CancelFunc
+	client *http.Client
+
+	responseBody []byte
+	tmpFile      string
+	urlsFile     string
+	bufBuilder   strings.Builder
+	bufBody      string
+	canvases     []string
+
+	rawUrl    string
+	parsedUrl *url.URL
+	savePath  string
+	bookId    string
 }
 
 func NewLoc() *Loc {
+	ctx, cancel := context.WithCancel(context.Background())
+	dm := downloader.NewDownloadManager(ctx, cancel, config.Conf.MaxConcurrent)
+
+	// 创建自定义 Transport 忽略 SSL 验证
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	jar, _ := cookiejar.New(nil)
 	return &Loc{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dm:     dm,
+		client: &http.Client{Timeout: config.Conf.Timeout * time.Second, Jar: jar, Transport: tr},
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
 func (r *Loc) GetRouterInit(sUrl string) (map[string]interface{}, error) {
-	msg, err := r.Run(sUrl)
+	r.rawUrl = sUrl
+	r.parsedUrl, _ = url.Parse(sUrl)
+	r.Run()
+	msg, err := r.Run()
 	return map[string]interface{}{
 		"url": sUrl,
 		"msg": msg,
 	}, err
 }
 
-func (r *Loc) Run(sUrl string) (msg string, err error) {
-
-	r.dt.UrlParsed, err = url.Parse(sUrl)
-	r.dt.Url = sUrl
-
-	r.dt.BookId = r.getBookId(r.dt.Url)
-	if r.dt.BookId == "" {
-		return "requested URL was not found.", err
-	}
-	r.dt.Jar, _ = cookiejar.New(nil)
-	return r.download()
-}
-
-func (r *Loc) getBookId(sUrl string) (bookId string) {
-	m := regexp.MustCompile(`item/([A-Za-z0-9]+)`).FindStringSubmatch(sUrl)
+func (r *Loc) getBookId() (bookId string) {
+	m := regexp.MustCompile(`item/([A-Za-z0-9]+)`).FindStringSubmatch(r.rawUrl)
 	if m != nil {
 		bookId = m[1]
 	}
 	return bookId
 }
 
-func (r *Loc) download() (msg string, err error) {
-	apiUrl := fmt.Sprintf("https://www.loc.gov/item/%s/?fo=json", r.dt.BookId)
+func (r *Loc) Run() (msg string, err error) {
+
+	r.bookId = r.getBookId()
+	if r.bookId == "" {
+		return "[err=getBookId]", err
+	}
+	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
+
+	apiUrl := fmt.Sprintf("https://www.loc.gov/item/%s/?fo=json", r.bookId)
 
 	//windows 处理
 	if os.PathSeparator == '\\' {
@@ -75,10 +96,9 @@ func (r *Loc) download() (msg string, err error) {
 			fmt.Println("Failed to write to shared memory:", err)
 			return
 		}
-		time.Sleep(time.Second * 10)
 		var html string
-		for i := 0; i < 60; i++ {
-			time.Sleep(time.Second * 3)
+		for i := 0; i < 300; i++ {
+			time.Sleep(time.Second * 1)
 			html, err = sharedmemory.ReadHTMLFromSharedMemory()
 			if err != nil || !strings.Contains(html, "https://tile.loc.gov/image-services/iiif/") {
 				continue
@@ -88,127 +108,115 @@ func (r *Loc) download() (msg string, err error) {
 		// 提取JSON部分
 		start := strings.Index(html, "<pre>") + 5
 		end := strings.Index(html, "</pre>")
-		r.xmlContent = []byte(html[start:end])
+		r.responseBody = []byte(html[start:end])
 	} else {
-		r.xmlContent, err = r.getBody(apiUrl, r.dt.Jar)
+		r.responseBody, err = r.getBody(apiUrl)
 	}
 
-	if err != nil || r.xmlContent == nil {
+	if err != nil || r.responseBody == nil {
 		return "requested URL was not found.", err
 	}
-	log.Printf("Get %s\n", r.dt.Url)
 
-	respVolume, err := r.getVolumes(r.dt.Url, r.dt.Jar)
-	if err != nil {
-		fmt.Println(err)
-		return "getVolumes", err
+	r.canvases, err = r.getCanvases()
+	if err != nil || r.canvases == nil {
+		return "", err
 	}
-	for i, vol := range respVolume {
-		if !config.VolumeRange(i) {
-			continue
-		}
-		canvases, err := r.getCanvases(vol, r.dt.Jar)
-		if err != nil || canvases == nil {
-			fmt.Println(err)
-			continue
-		}
-		if os.PathSeparator != '\\' {
-			vid := fmt.Sprintf("%04d", i+1)
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
-			log.Printf(" %d/%d volume, %d pages \n", i+1, len(respVolume), len(canvases))
-			r.do(canvases)
-		}
-	}
+	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
 	if os.PathSeparator == '\\' {
-		r.urlsFile = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "") + "urls.txt"
+		r.urlsFile = r.savePath + "urls.txt"
 		os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
-		err = sharedmemory.WriteURLToSharedMemory(r.urlsFile)
-		if err != nil {
-			fmt.Println("Failed to write to shared memory:", err)
-			return
-		}
-		fmt.Println()
-		fmt.Printf("已生成 %s 文件，接下来转到 bookget-gui 中继续工作。 \n", r.urlsFile)
+		r.do(r.canvases)
+	} else {
+		r.letsGo(r.canvases)
 	}
 	return "", nil
 }
 
-func (r *Loc) do(imgUrls []string) (msg string, err error) {
-	if imgUrls == nil {
-		return
+func (r *Loc) do(canvases []string) (msg string, err error) {
+	sizeVol := len(canvases)
+	if sizeVol <= 0 {
+		return "[err=letsGo]", err
 	}
-	fmt.Println()
-	referer := url.QueryEscape(r.dt.Url)
-	size := len(imgUrls)
 
-	var wg sync.WaitGroup
-	q := QueueNew(int(config.Conf.Threads))
-	for i, uri := range imgUrls {
-		if uri == "" || !config.PageRange(i, size) {
+	bar := progressbar.Default(int64(sizeVol), "downloading")
+	for i, imgUrl := range canvases {
+		i++
+		sortId := fmt.Sprintf("%04d", i)
+		fileName := sortId + config.Conf.FileExt
+
+		if imgUrl == "" || !config.PageRange(i, sizeVol) {
+			bar.Add(1)
 			continue
 		}
-		sortId := fmt.Sprintf("%04d", i+1)
-		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
-		if FileExist(dest) {
+		//跳过存在的文件
+		targetFilePath := r.savePath + fileName
+		if FileExist(r.savePath + fileName) {
+			bar.Add(1)
 			continue
 		}
-		imgUrl := uri
-		log.Printf("Get %d/%d, %s\n", i+1, size, imgUrl)
-		wg.Add(1)
-		q.Go(func() {
-			defer wg.Done()
-			ctx := context.Background()
-			opts := gohttp.Options{
-				DestFile:    dest,
-				Overwrite:   false,
-				Concurrency: 1,
-				CookieFile:  config.Conf.CookieFile,
-				CookieJar:   r.dt.Jar,
-				Headers: map[string]interface{}{
-					"User-Agent": config.Conf.UserAgent,
-					"Referer":    referer,
-				},
+		err = sharedmemory.WriteURLImagePathToSharedMemory(imgUrl, targetFilePath)
+		if err != nil {
+			fmt.Println("Failed to write to shared memory:", err)
+			return
+		}
+		for i := 0; i < 300; i++ {
+			time.Sleep(time.Second * 1)
+			ok, err := sharedmemory.ReadImageReadyFromSharedMemory()
+			if err != nil || !ok {
+				continue
 			}
-			for k := 0; k < config.Conf.Retries; k++ {
-				_, err := gohttp.FastGet(ctx, imgUrl, opts)
-				if err == nil {
-					break
-				}
-			}
-			util.PrintSleepTime(config.Conf.Speed)
-			fmt.Println()
-		})
+			break
+		}
+		bar.Add(1)
 	}
-	wg.Wait()
 	fmt.Println()
 	return "", err
 }
 
-func (r *Loc) getVolumes(sUrl string, jar *cookiejar.Jar) (volumes []string, err error) {
-	var manifests = new(loc.ManifestsJson)
-	if err = json.Unmarshal(r.xmlContent, manifests); err != nil {
-		log.Printf("json.Unmarshal failed: %s\n", err)
-		return
-	}
-	//一本书有N卷
-	for _, resource := range manifests.Resources {
-		volumes = append(volumes, resource.Url)
-	}
-	return volumes, nil
-}
-
-func (r *Loc) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string, err error) {
-	var manifests = new(loc.ManifestsJson)
-	if err = json.Unmarshal(r.xmlContent, manifests); err != nil {
-		log.Printf("json.Unmarshal failed: %s\n", err)
-		return
+func (r *Loc) letsGo(canvases []string) (msg string, err error) {
+	sizeVol := len(canvases)
+	if sizeVol <= 0 {
+		return "[err=letsGo]", err
 	}
 
-	for _, resource := range manifests.Resources {
-		if resource.Url != sUrl {
+	counter := 0
+	for i, imgUrl := range canvases {
+		i++
+		sortId := fmt.Sprintf("%04d", i)
+		fileName := sortId + config.Conf.FileExt
+
+		if imgUrl == "" || !config.PageRange(i, sizeVol) {
 			continue
 		}
+		//跳过存在的文件
+		if FileExist(r.savePath + fileName) {
+			continue
+		}
+		// 添加GET下载任务
+		r.dm.AddTask(
+			imgUrl,
+			"GET",
+			map[string]string{"User-Agent": config.Conf.UserAgent},
+			nil,
+			r.savePath,
+			fileName,
+			config.Conf.Threads,
+		)
+		counter++
+	}
+	fmt.Println()
+	r.dm.SetBar(counter)
+	r.dm.Start()
+	return "", err
+}
+
+func (r *Loc) getCanvases() (canvases []string, err error) {
+	var manifests = new(loc.ManifestsJson)
+	if err = json.Unmarshal(r.responseBody, manifests); err != nil {
+		return nil, err
+	}
+
+	for _, resource := range manifests.Resources {
 		for _, file := range resource.Files {
 			//每页有6种下载方式
 			imgUrl, ok := r.getImagePage(file)
@@ -221,28 +229,68 @@ func (r *Loc) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string, e
 	}
 	return canvases, nil
 }
-func (r *Loc) getBody(apiUrl string, jar *cookiejar.Jar) (bs []byte, err error) {
-	referer := r.dt.Url
-	ctx := context.Background()
-	cli := gohttp.NewClient(ctx, gohttp.Options{
-		CookieFile: config.Conf.CookieFile,
-		CookieJar:  jar,
-		Headers: map[string]interface{}{
-			"User-Agent": config.Conf.UserAgent,
-			"Referer":    referer,
-			"authority":  "www.loc.gov",
-			"origin":     "https://www.loc.gov",
-		},
-	})
-	resp, err := cli.Get(apiUrl)
+
+//func (r *Loc) getVolumes() (volumes []string, err error) {
+//	var manifests = new(loc.ManifestsJson)
+//	if err = json.Unmarshal(r.responseBody, manifests); err != nil {
+//		log.Printf("json.Unmarshal failed: %s\n", err)
+//		return
+//	}
+//	//一本书有N卷
+//	for _, resource := range manifests.Resources {
+//		volumes = append(volumes, resource.Url)
+//	}
+//	return volumes, nil
+//}
+
+//func (r *Loc) getCanvases(sUrl string) ([]string, err error) {
+//	var manifests = new(loc.ManifestsJson)
+//	if err = json.Unmarshal(r.responseBody, manifests); err != nil {
+//		return nil, err
+//	}
+//
+//	for _, resource := range manifests.Resources {
+//		if resource.Url != sUrl {
+//			continue
+//		}
+//		for _, file := range resource.Files {
+//			//每页有6种下载方式
+//			imgUrl, ok := r.getImagePage(file)
+//			if ok {
+//				r.bufBuilder.WriteString(imgUrl)
+//				r.bufBuilder.WriteString("\n")
+//				r.canvases = append(r.canvases, imgUrl)
+//			}
+//		}
+//	}
+//	return r.canvases, nil
+//}
+
+func (r *Loc) getBody(sUrl string) (bs []byte, err error) {
+	req, err := http.NewRequest("GET", sUrl, nil)
 	if err != nil {
 		return nil, err
 	}
-	bs, _ = resp.GetBody()
-	if resp.GetStatusCode() != http.StatusOK {
-		return nil, errors.New(fmt.Sprintf("ErrCode:%d, %s", resp.GetStatusCode(), resp.GetReasonPhrase()))
+	req.Header.Set("User-Agent", config.Conf.UserAgent)
+	resp, err := r.client.Do(req.WithContext(r.ctx))
+	if err != nil {
+		return nil, err
 	}
-	return bs, nil
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("close body err=%v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		err = fmt.Errorf("服务器返回错误状态码: %d", resp.StatusCode)
+		return nil, err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 func (r *Loc) getImagePage(fileUrls []loc.ImageFile) (downloadUrl string, ok bool) {
 	for _, f := range fileUrls {
