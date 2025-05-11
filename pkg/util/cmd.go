@@ -159,22 +159,29 @@ func PrintSleepTime(sec int) {
 //}
 
 func OpenWebBrowser(args []string) bool {
-	procAttr := &os.ProcAttr{
-		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-	}
-	fPath, _ := os.Executable()
-	binDir := filepath.Dir(fPath)
-
-	argv := []string{"/c", "-i"}
-	if args != nil {
-		argv = append(argv, args...)
-	}
-	process, err := os.StartProcess(binDir+"\\bookget-gui.exe", argv, procAttr)
-	if err != nil {
-		fmt.Println("start process error:", err)
+	running, err := IsBookgetGuiRunning()
+	if running || err != nil {
 		return false
 	}
-	_ = process.Release()
+	go func() {
+		procAttr := &os.ProcAttr{
+			Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+		}
+		fPath, _ := os.Executable()
+		binDir := filepath.Dir(fPath)
+
+		argv := []string{"/c", "-i"}
+		if args != nil {
+			argv = append(argv, args...)
+		}
+		process, err := os.StartProcess(binDir+"\\bookget-gui.exe", argv, procAttr)
+		if err != nil {
+			fmt.Println("start process error:", err)
+			return
+		}
+		_ = process.Release()
+	}()
+
 	return true
 }
 

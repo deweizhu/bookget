@@ -105,12 +105,7 @@ func (r *Cuhk) Run() (msg string, err error) {
 	}
 	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
 
-	running, err := util.IsBookgetGuiRunning()
-	if err != nil {
-		return "", err
-	}
-	if !running {
-		util.OpenWebBrowser([]string{"-i", r.rawUrl})
+	if util.OpenWebBrowser([]string{"-i", r.rawUrl}) {
 		fmt.Println("已启动 bookget-gui 浏览器，请注意完成「真人验证」。")
 	}
 

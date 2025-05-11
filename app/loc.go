@@ -91,12 +91,7 @@ func (r *Loc) Run() (msg string, err error) {
 
 	//windows 处理
 	if os.PathSeparator == '\\' {
-		running, err := util.IsBookgetGuiRunning()
-		if err != nil {
-			return "", err
-		}
-		if !running {
-			go util.OpenWebBrowser([]string{"-i", apiUrl})
+		if util.OpenWebBrowser([]string{"-i", apiUrl}) {
 			fmt.Println("已启动 bookget-gui 浏览器，请注意完成「真人验证」。")
 		}
 
