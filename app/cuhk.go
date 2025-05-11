@@ -3,169 +3,158 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/cuhk"
-	"bookget/pkg/downloader"
 	"bookget/pkg/gohttp"
+	"bookget/pkg/progressbar"
+	"bookget/pkg/sharedmemory"
 	"bookget/pkg/util"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type Cuhk struct {
-	dt  *DownloadTask
-	ctx context.Context
+	ctx    context.Context
+	cancel context.CancelFunc
+	client *http.Client
+
+	responseBody []byte
+	tmpFile      string
+	urlsFile     string
+	bufBuilder   strings.Builder
+	bufBody      string
+	canvases     []string
+
+	rawUrl    string
+	parsedUrl *url.URL
+	savePath  string
+	bookId    string
 }
 
 func NewCuhk() *Cuhk {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// 创建自定义 Transport 忽略 SSL 验证
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	jar, _ := cookiejar.New(nil)
 	return &Cuhk{
 		// 初始化字段
-		dt:  new(DownloadTask),
-		ctx: context.Background(),
+		client: &http.Client{Timeout: config.Conf.Timeout * time.Second, Jar: jar, Transport: tr},
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
 func (r *Cuhk) GetRouterInit(sUrl string) (map[string]interface{}, error) {
-	msg, err := r.Run(sUrl)
+	lastPos := strings.Index(sUrl, "#")
+	if lastPos > 0 {
+		r.rawUrl = strings.Replace(sUrl[:lastPos], "hk/sc/", "hk/en/", -1)
+	} else {
+		r.rawUrl = strings.Replace(sUrl, "hk/sc/", "hk/en/", -1)
+	}
+	r.parsedUrl, _ = url.Parse(r.rawUrl)
+	msg, err := r.Run()
 	return map[string]interface{}{
-		"url": sUrl,
+		"url": r.rawUrl,
 		"msg": msg,
 	}, err
 }
 
-func (r *Cuhk) Run(sUrl string) (msg string, err error) {
-	r.dt.UrlParsed, err = url.Parse(sUrl)
-	r.dt.Url = sUrl
-	r.dt.BookId = getBookId(r.dt.Url)
-	if r.dt.BookId == "" {
-		return "requested URL was not found.", err
+func (r *Cuhk) getBookId() string {
+	const (
+		IdPattern  = `(?i)/item/([^#/]+)`
+		IdPattern2 = `(?i)/object/([^#/]+)`
+	)
+
+	// 预编译正则表达式
+	var (
+		IdRe  = regexp.MustCompile(IdPattern)
+		IdRe2 = regexp.MustCompile(IdPattern2)
+	)
+
+	// 优先尝试匹配 metadataId
+	if matches := IdRe.FindStringSubmatch(r.rawUrl); matches != nil && len(matches) > 1 {
+		return matches[1]
 	}
-	r.dt.Jar, _ = cookiejar.New(nil)
-	//OpenWebBrowser(sUrl, []string{})
-	WaitNewCookie()
-	return r.download()
+
+	// 然后尝试匹配 id
+	if matches := IdRe2.FindStringSubmatch(r.rawUrl); matches != nil && len(matches) > 1 {
+		return matches[1]
+	}
+
+	return "" // 明确返回空字符串表示未找到
 }
 
-func (r *Cuhk) download() (msg string, err error) {
-	log.Printf("Get %s\n", r.dt.Url)
-	respVolume, err := r.getVolumes(r.dt.Url, r.dt.Jar)
+func (r *Cuhk) Run() (msg string, err error) {
+	r.bookId = r.getBookId()
+	if r.bookId == "" {
+		return "[err=getBookId]", err
+	}
+	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
+
+	respVolume, err := r.getVolumes()
 	if err != nil {
-		fmt.Println(err)
-		return "getVolumes", err
+		return "[err=getVolumes]", err
 	}
 	for i, vol := range respVolume {
 		if !config.VolumeRange(i) {
 			continue
 		}
 		vid := fmt.Sprintf("%04d", i+1)
-		r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
-		canvases, err := r.getCanvases(vol, r.dt.Jar)
-		if err != nil || canvases == nil {
-			fmt.Println(err)
+		r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, vid)
+		r.canvases, err = r.getCanvases(vol)
+		if err != nil || r.canvases == nil {
 			continue
 		}
-		log.Printf(" %d/%d volume, %d pages \n", i+1, len(respVolume), len(canvases))
-		r.do(canvases)
+		r.do()
 	}
 	return "", nil
 }
 
-func (r *Cuhk) do(imgUrls []string) (msg string, err error) {
-	if imgUrls == nil {
-		return
-	}
-	if config.Conf.UseDzi {
-		r.doDezoomifyRs(imgUrls)
-	} else {
-		r.doNormal(imgUrls)
-	}
-	return "", err
-}
-
-func (r *Cuhk) doDezoomifyRs(iiifUrls []string) bool {
-	if iiifUrls == nil {
-		return false
-	}
-	referer := url.QueryEscape(r.dt.Url)
-	size := len(iiifUrls)
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
-	for i, uri := range iiifUrls {
-		if uri == "" || !config.PageRange(i, size) {
+func (r *Cuhk) do() (msg string, err error) {
+	fmt.Println()
+	sizeVol := len(r.canvases)
+	bar := progressbar.Default(int64(sizeVol), "downloading")
+	for i, uri := range r.canvases {
+		if uri == "" || !config.PageRange(i, sizeVol) {
+			bar.Add(1)
 			continue
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
-		if FileExist(dest) {
+		targetFilePath := r.savePath + filename
+		if FileExist(targetFilePath) {
+			bar.Add(1)
 			continue
 		}
-		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		cookies := gohttp.ReadCookieFile(config.Conf.CookieFile)
-		args := []string{
-			"-H", "Origin:" + referer,
-			"-H", "Referer:" + referer,
-			"-H", "User-Agent:" + config.Conf.UserAgent,
-			"-H", "cookie:" + cookies,
+		ok, err := r.imageDownloader(uri, targetFilePath)
+		if err == nil && ok {
+			bar.Add(1)
 		}
-		downloader.Dezoomify(r.ctx, uri, dest, args)
-
-	}
-	return true
-}
-
-func (r *Cuhk) doNormal(imgUrls []string) {
-	fmt.Println()
-	referer := r.dt.Url
-	size := len(imgUrls)
-	ctx := context.Background()
-	for i, uri := range imgUrls {
-		if uri == "" || !config.PageRange(i, size) {
-			continue
-		}
-		sortId := fmt.Sprintf("%04d", i+1)
-		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
-		if FileExist(dest) {
-			continue
-		}
-		log.Printf("Get %d/%d,  URL: %s\n", i+1, size, uri)
-		opts := gohttp.Options{
-			DestFile:    dest,
-			Overwrite:   false,
-			Concurrency: 1,
-			CookieFile:  config.Conf.CookieFile,
-			CookieJar:   r.dt.Jar,
-			Headers: map[string]interface{}{
-				"User-Agent": config.Conf.UserAgent,
-				"Referer":    referer,
-				//"X-ISLANDORA-TOKEN": v.Token,
-			},
-		}
-		for k := 0; k < 10; k++ {
-			resp, err := gohttp.FastGet(ctx, uri, opts)
-			if err == nil && resp.GetStatusCode() == 200 {
-				break
-			}
-			WaitNewCookieWithMsg(uri)
-		}
-		util.PrintSleepTime(config.Conf.Speed)
-		fmt.Println()
 	}
 	fmt.Println()
-
+	return
 }
 
-func (r *Cuhk) getVolumes(sUrl string, jar *cookiejar.Jar) (volumes []string, err error) {
-	bs, err := r.getBodyWithLoop(sUrl, jar)
+func (r *Cuhk) getVolumes() (volumes []string, err error) {
+	bs, err := r.getBodyByGui(r.rawUrl)
 	subText := util.SubText(string(bs), "id=\"block-islandora-compound-object-compound-navigation-select-list\"", "id=\"book-viewer\">")
 	matches := regexp.MustCompile(`value=['"]([A-z\d:_-]+)['"]`).FindAllStringSubmatch(subText, -1)
 	if matches == nil {
-		volumes = append(volumes, sUrl)
+		volumes = append(volumes, r.rawUrl)
 		return
 	}
 	volumes = make([]string, 0, len(matches))
@@ -175,49 +164,76 @@ func (r *Cuhk) getVolumes(sUrl string, jar *cookiejar.Jar) (volumes []string, er
 			continue
 		}
 		id := strings.Replace(m[1], ":", "-", 1)
-		volumes = append(volumes, fmt.Sprintf("https://repository.lib.cuhk.edu.hk/sc/item/%s#page/1/mode/2up", id))
+		volumes = append(volumes, fmt.Sprintf("https://%s/en/item/%s", r.parsedUrl.Host, id))
 	}
 	return volumes, nil
 }
 
-func (r *Cuhk) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string, err error) {
-	bs, err := r.getBodyWithLoop(sUrl, jar)
+func (r *Cuhk) getCanvases(sUrl string) (canvases []string, err error) {
+	if sUrl != r.rawUrl {
+		r.responseBody, err = r.getBodyByGui(sUrl)
+		if err != nil {
+			return
+		}
+	}
 	var resp cuhk.ResponsePage
-	matches := regexp.MustCompile(`"pages":([^]]+)]`).FindSubmatch(bs)
+	matches := regexp.MustCompile(`"pages":([^]]+)]`).FindSubmatch(r.responseBody)
 	if matches == nil {
-		return nil, err
+		return nil, errors.New("[err=getCanvases]")
 	}
 	data := []byte("{\"pages\":" + string(matches[1]) + "]}")
 	if err = json.Unmarshal(data, &resp); err != nil {
 		log.Printf("json.Unmarshal failed: %s\n", err)
 	}
+	r.bufBuilder.Reset()
 	for _, page := range resp.ImagePage {
 		var imgUrl string
-		if config.Conf.UseDzi {
-			//dezoomify-rs URL
-			imgUrl = fmt.Sprintf("https://%s/iiif/2/%s/info.json", r.dt.UrlParsed.Host, page.Identifier)
-		} else {
-			if config.Conf.FileExt == ".jpg" {
-				imgUrl = fmt.Sprintf("https://%s/iiif/2/%s/%s", r.dt.UrlParsed.Host, page.Identifier, config.Conf.Format)
-			} else {
-				imgUrl = fmt.Sprintf("https://%s/islandora/object/%s/datastream/JP2", r.dt.UrlParsed.Host, page.Pid)
-			}
-		}
+		//if config.Conf.UseDzi {
+		//	//dezoomify-rs URL
+		//	imgUrl = fmt.Sprintf("https://%s/iiif/2/%s/info.json", r.parsedUrl.Host, page.Identifier)
+		//} else {
+		imgUrl = fmt.Sprintf("https://%s/iiif/2/%s/%s", r.parsedUrl.Host, page.Identifier, config.Conf.Format)
+		//}
+		r.bufBuilder.WriteString(imgUrl)
+		r.bufBuilder.WriteString("\n")
 		canvases = append(canvases, imgUrl)
 	}
+	r.urlsFile = r.savePath + "urls.txt"
+	os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
 	return canvases, err
 }
 
-func (r *Cuhk) getBodyWithLoop(sUrl string, jar *cookiejar.Jar) (bs []byte, err error) {
-	for i := 0; i < 1000; i++ {
-		bs, err = r.getBody(sUrl, jar)
-		if err != nil {
-			WaitNewCookie()
+func (r *Cuhk) getBodyByGui(apiUrl string) (bs []byte, err error) {
+	err = sharedmemory.WriteURLToSharedMemory(apiUrl)
+	if err != nil {
+		fmt.Println("Failed to write to shared memory:", err)
+		return
+	}
+	for i := 0; i < 300; i++ {
+		time.Sleep(time.Second * 1)
+		r.bufBody, err = sharedmemory.ReadHTMLFromSharedMemory()
+		if err == nil && r.bufBody != "" && !strings.Contains(r.bufBody, "window.awsWafCookieDomainList") {
+			break
+		}
+	}
+	return []byte(r.bufBody), nil
+}
+
+func (r *Cuhk) imageDownloader(imgUrl, targetFilePath string) (ok bool, err error) {
+	err = sharedmemory.WriteURLImagePathToSharedMemory(imgUrl, targetFilePath)
+	if err != nil {
+		fmt.Println("Failed to write to shared memory:", err)
+		return
+	}
+	for i := 0; i < 300; i++ {
+		time.Sleep(time.Second * 1)
+		ok, err = sharedmemory.ReadImageReadyFromSharedMemory()
+		if err != nil || !ok {
 			continue
 		}
 		break
 	}
-	return bs, nil
+	return ok, nil
 }
 
 func (r *Cuhk) getBody(apiUrl string, jar *cookiejar.Jar) ([]byte, error) {
@@ -240,19 +256,4 @@ func (r *Cuhk) getBody(apiUrl string, jar *cookiejar.Jar) ([]byte, error) {
 		return nil, errors.New(fmt.Sprintf("ErrCode:%d, %s", resp.GetStatusCode(), resp.GetReasonPhrase()))
 	}
 	return bs, nil
-}
-
-func (r *Cuhk) getCanvasesJPEG2000(sUrl string, jar *cookiejar.Jar) (imagePage []cuhk.ImagePage) {
-	bs, err := r.getBodyWithLoop(sUrl, jar)
-	var resp cuhk.ResponsePage
-	matches := regexp.MustCompile(`"pages":([^]]+)]`).FindSubmatch(bs)
-	if matches != nil {
-		data := []byte("{\"pages\":" + string(matches[1]) + "]}")
-		if err = json.Unmarshal(data, &resp); err != nil {
-			log.Printf("json.Unmarshal failed: %s\n", err)
-		}
-		imagePage = make([]cuhk.ImagePage, len(resp.ImagePage))
-		copy(imagePage, resp.ImagePage)
-	}
-	return imagePage
 }

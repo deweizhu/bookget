@@ -63,7 +63,6 @@ func NewLoc() *Loc {
 func (r *Loc) GetRouterInit(sUrl string) (map[string]interface{}, error) {
 	r.rawUrl = sUrl
 	r.parsedUrl, _ = url.Parse(sUrl)
-	r.Run()
 	msg, err := r.Run()
 	return map[string]interface{}{
 		"url": sUrl,
@@ -91,30 +90,18 @@ func (r *Loc) Run() (msg string, err error) {
 
 	//windows 处理
 	if os.PathSeparator == '\\' {
-		err = sharedmemory.WriteURLToSharedMemory(apiUrl)
-		if err != nil {
-			fmt.Println("Failed to write to shared memory:", err)
-			return
-		}
-		var html string
-		for i := 0; i < 300; i++ {
-			time.Sleep(time.Second * 1)
-			html, err = sharedmemory.ReadHTMLFromSharedMemory()
-			if err != nil || !strings.Contains(html, "https://tile.loc.gov/image-services/iiif/") {
-				continue
-			}
-			break
-		}
+		r.bufBody, err = r.getBodyByGui(apiUrl)
 		// 提取JSON部分
-		start := strings.Index(html, "<pre>") + 5
-		end := strings.Index(html, "</pre>")
-		r.responseBody = []byte(html[start:end])
+		start := strings.Index(r.bufBody, "<pre>") + 5
+		end := strings.Index(r.bufBody, "</pre>")
+		if start <= 0 || end <= 0 || err != nil {
+			return "[err=getBodyByGui]", err
+		}
+		r.bufBody = r.bufBody[start:end]
+		r.responseBody = []byte(r.bufBody)
 	} else {
 		r.responseBody, err = r.getBody(apiUrl)
-	}
-
-	if err != nil || r.responseBody == nil {
-		return "requested URL was not found.", err
+		r.bufBody = string(r.responseBody)
 	}
 
 	r.canvases, err = r.getCanvases()
@@ -154,20 +141,11 @@ func (r *Loc) do(canvases []string) (msg string, err error) {
 			bar.Add(1)
 			continue
 		}
-		err = sharedmemory.WriteURLImagePathToSharedMemory(imgUrl, targetFilePath)
-		if err != nil {
-			fmt.Println("Failed to write to shared memory:", err)
-			return
+
+		ok, err := r.imageDownloader(imgUrl, targetFilePath)
+		if err == nil && ok {
+			bar.Add(1)
 		}
-		for i := 0; i < 300; i++ {
-			time.Sleep(time.Second * 1)
-			ok, err := sharedmemory.ReadImageReadyFromSharedMemory()
-			if err != nil || !ok {
-				continue
-			}
-			break
-		}
-		bar.Add(1)
 	}
 	fmt.Println()
 	return "", err
@@ -292,6 +270,7 @@ func (r *Loc) getBody(sUrl string) (bs []byte, err error) {
 	}
 	return body, nil
 }
+
 func (r *Loc) getImagePage(fileUrls []loc.ImageFile) (downloadUrl string, ok bool) {
 	for _, f := range fileUrls {
 		if config.Conf.FileExt == ".jpg" && f.Mimetype == "image/jpeg" {
@@ -311,4 +290,37 @@ func (r *Loc) getImagePage(fileUrls []loc.ImageFile) (downloadUrl string, ok boo
 		}
 	}
 	return
+}
+
+func (r *Loc) getBodyByGui(apiUrl string) (buf string, err error) {
+	err = sharedmemory.WriteURLToSharedMemory(apiUrl)
+	if err != nil {
+		fmt.Println("Failed to write to shared memory:", err)
+		return
+	}
+	for i := 0; i < 300; i++ {
+		time.Sleep(time.Second * 1)
+		r.bufBody, err = sharedmemory.ReadHTMLFromSharedMemory()
+		if err == nil && r.bufBody != "" && strings.Contains(r.bufBody, "https://tile.loc.gov/image-services/iiif/") {
+			break
+		}
+	}
+	return r.bufBody, nil
+}
+
+func (r *Loc) imageDownloader(imgUrl, targetFilePath string) (ok bool, err error) {
+	err = sharedmemory.WriteURLImagePathToSharedMemory(imgUrl, targetFilePath)
+	if err != nil {
+		fmt.Println("Failed to write to shared memory:", err)
+		return
+	}
+	for i := 0; i < 300; i++ {
+		time.Sleep(time.Second * 1)
+		ok, err = sharedmemory.ReadImageReadyFromSharedMemory()
+		if err != nil || !ok {
+			continue
+		}
+		break
+	}
+	return ok, nil
 }
