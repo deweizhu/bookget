@@ -9,8 +9,29 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"syscall"
 	"time"
+	"unsafe"
 )
+
+const (
+	TH32CS_SNAPPROCESS = 0x00000002
+	MAX_PATH           = 260
+)
+
+type ProcessEntry32 struct {
+	Size            uint32
+	CntUsage        uint32
+	ProcessID       uint32
+	DefaultHeapID   uintptr
+	ModuleID        uint32
+	CntThreads      uint32
+	ParentProcessID uint32
+	PriClassBase    int32
+	Flags           uint32
+	ExeFile         [MAX_PATH]uint16 // 使用 uint16 而不是 byte
+}
 
 func RunCommand(ctx context.Context, text string) error {
 	fmt.Println(text)
@@ -137,7 +158,7 @@ func PrintSleepTime(sec int) {
 //	return true
 //}
 
-func OpenGUI(args []string) bool {
+func OpenWebBrowser(args []string) bool {
 	procAttr := &os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
 	}
@@ -155,4 +176,63 @@ func OpenGUI(args []string) bool {
 	}
 	_ = process.Release()
 	return true
+}
+
+func isProcessRunning(processName string) (bool, error) {
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	createToolhelp32Snapshot := kernel32.NewProc("CreateToolhelp32Snapshot")
+	process32First := kernel32.NewProc("Process32FirstW") // 使用宽字符版本
+	process32Next := kernel32.NewProc("Process32NextW")   // 使用宽字符版本
+	closeHandle := kernel32.NewProc("CloseHandle")
+
+	// 创建进程快照
+	snapshot, _, err := createToolhelp32Snapshot.Call(TH32CS_SNAPPROCESS, 0)
+	if snapshot == uintptr(syscall.InvalidHandle) {
+		return false, fmt.Errorf("创建进程快照失败: %v", err)
+	}
+	defer closeHandle.Call(snapshot)
+
+	var entry ProcessEntry32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+
+	// 获取第一个进程
+	ret, _, err := process32First.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
+	if ret == 0 {
+		return false, fmt.Errorf("获取进程信息失败: %v", err)
+	}
+
+	for {
+		// 正确转换 UTF-16 字符串
+		exeFile := syscall.UTF16ToString(entry.ExeFile[:])
+		// 去除字符串末尾的空字符
+		exeFile = strings.TrimRight(exeFile, "\x00")
+		if strings.EqualFold(exeFile, processName) {
+			return true, nil
+		}
+
+		// 获取下一个进程
+		ret, _, err := process32Next.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
+		if ret == 0 {
+			if errno, ok := err.(syscall.Errno); ok && errno == 0 {
+				break // 正常结束
+			}
+			return false, nil
+		}
+	}
+
+	return false, nil
+}
+
+func IsBookgetGuiRunning() (ok bool, err error) {
+	processName := "bookget-gui.exe"
+	running, err := isProcessRunning(processName)
+	if err != nil {
+		return false, err
+	}
+
+	if running {
+		return true, nil
+	} else {
+		return false, nil
+	}
 }

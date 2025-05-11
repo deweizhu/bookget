@@ -15,7 +15,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 )
 
 type Downloader interface {
@@ -145,35 +144,6 @@ func CreateDirectory(domain, bookId, volumeId string) string {
 	}
 	_ = os.MkdirAll(dirPath, os.ModePerm)
 	return dirPath
-}
-
-func OpenWebBrowser(sUrl string, args []string) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		argv := []string{sUrl}
-		if args != nil {
-			argv = append(argv, args...)
-		}
-		if ret := util.OpenGUI(argv); ret == true {
-			return
-		}
-	}()
-
-	//WaitNewCookie
-	fmt.Println("请使用 bookget-gui 浏览器，打开图书网址，完成「真人验证 / 登录用户」，然后 「刷新」 网页.")
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 3600*8; i++ {
-			if FileExist(config.Conf.CookieFile) {
-				break
-			}
-			time.Sleep(time.Second * 3)
-		}
-	}()
-
-	wg.Wait()
 }
 
 func WaitNewCookie() {

@@ -53,11 +53,17 @@ func (r *LodNLGoKr) Run(sUrl string) (msg string, err error) {
 	r.dt.Jar, _ = cookiejar.New(nil)
 	r.apiUrl = "http://viewer.nl.go.kr:8080"
 	//r.apiUrl = "https://viewer.nl.go.kr"
-	webUrl := r.apiUrl + "/nlmivs/viewWonmun_js.jsp?card_class=L&cno=" + r.dt.BookId
-	//AppData\Roaming\BookGet\bookget\User Data\
-	r.tmpFile = config.UserHomeDir() + "\\bookget\\tmp.html"
-	os.Remove(r.tmpFile)
-	OpenWebBrowser(webUrl, []string{"-o", "tmp.html"})
+	apiUrl := r.apiUrl + "/nlmivs/viewWonmun_js.jsp?card_class=L&cno=" + r.dt.BookId
+
+	running, err := util.IsBookgetGuiRunning()
+	if err != nil {
+		return "", err
+	}
+	if !running {
+		util.OpenWebBrowser([]string{"-i", apiUrl})
+		fmt.Println("已启动 bookget-gui 浏览器，请注意完成「真人验证」，此站需要安装 nlviewer 。")
+	}
+
 	return r.download()
 }
 

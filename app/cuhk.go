@@ -105,30 +105,37 @@ func (r *Cuhk) Run() (msg string, err error) {
 	}
 	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
 
-	respVolume, err := r.getVolumes()
+	running, err := util.IsBookgetGuiRunning()
 	if err != nil {
-		return "[err=getVolumes]", err
+		return "", err
 	}
-	for i, vol := range respVolume {
-		if !config.VolumeRange(i) {
-			continue
-		}
-		vid := fmt.Sprintf("%04d", i+1)
-		r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, vid)
-		r.canvases, err = r.getCanvases(vol)
-		if err != nil || r.canvases == nil {
-			continue
-		}
-		r.do()
+	if !running {
+		util.OpenWebBrowser([]string{"-i", r.rawUrl})
+		fmt.Println("已启动 bookget-gui 浏览器，请注意完成「真人验证」。")
 	}
+
+	r.canvases, err = r.getCanvases(r.rawUrl)
+	if err != nil || r.canvases == nil {
+		return "", err
+	}
+
+	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
+	r.urlsFile = r.savePath + "urls.txt"
+	err = os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("\n已生成图片URLs文件[%s]\n 可复制到 bookget-gui.exe 目录下，或使用其它软件下载。\n", r.urlsFile)
+
+	r.do(r.canvases)
 	return "", nil
 }
 
-func (r *Cuhk) do() (msg string, err error) {
+func (r *Cuhk) do(canvases []string) (msg string, err error) {
 	fmt.Println()
-	sizeVol := len(r.canvases)
+	sizeVol := len(canvases)
 	bar := progressbar.Default(int64(sizeVol), "downloading")
-	for i, uri := range r.canvases {
+	for i, uri := range canvases {
 		if uri == "" || !config.PageRange(i, sizeVol) {
 			bar.Add(1)
 			continue
@@ -170,11 +177,9 @@ func (r *Cuhk) getVolumes() (volumes []string, err error) {
 }
 
 func (r *Cuhk) getCanvases(sUrl string) (canvases []string, err error) {
-	if sUrl != r.rawUrl {
-		r.responseBody, err = r.getBodyByGui(sUrl)
-		if err != nil {
-			return
-		}
+	r.responseBody, err = r.getBodyByGui(sUrl)
+	if err != nil {
+		return
 	}
 	var resp cuhk.ResponsePage
 	matches := regexp.MustCompile(`"pages":([^]]+)]`).FindSubmatch(r.responseBody)
@@ -185,7 +190,6 @@ func (r *Cuhk) getCanvases(sUrl string) (canvases []string, err error) {
 	if err = json.Unmarshal(data, &resp); err != nil {
 		log.Printf("json.Unmarshal failed: %s\n", err)
 	}
-	r.bufBuilder.Reset()
 	for _, page := range resp.ImagePage {
 		var imgUrl string
 		//if config.Conf.UseDzi {
@@ -196,11 +200,9 @@ func (r *Cuhk) getCanvases(sUrl string) (canvases []string, err error) {
 		//}
 		r.bufBuilder.WriteString(imgUrl)
 		r.bufBuilder.WriteString("\n")
-		canvases = append(canvases, imgUrl)
+		r.canvases = append(r.canvases, imgUrl)
 	}
-	r.urlsFile = r.savePath + "urls.txt"
-	os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
-	return canvases, err
+	return r.canvases, err
 }
 
 func (r *Cuhk) getBodyByGui(apiUrl string) (bs []byte, err error) {

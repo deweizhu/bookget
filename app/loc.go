@@ -6,6 +6,7 @@ import (
 	"bookget/pkg/downloader"
 	"bookget/pkg/progressbar"
 	"bookget/pkg/sharedmemory"
+	"bookget/pkg/util"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -90,6 +91,15 @@ func (r *Loc) Run() (msg string, err error) {
 
 	//windows 处理
 	if os.PathSeparator == '\\' {
+		running, err := util.IsBookgetGuiRunning()
+		if err != nil {
+			return "", err
+		}
+		if !running {
+			go util.OpenWebBrowser([]string{"-i", apiUrl})
+			fmt.Println("已启动 bookget-gui 浏览器，请注意完成「真人验证」。")
+		}
+
 		r.bufBody, err = r.getBodyByGui(apiUrl)
 		// 提取JSON部分
 		start := strings.Index(r.bufBody, "<pre>") + 5
@@ -111,7 +121,11 @@ func (r *Loc) Run() (msg string, err error) {
 	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
 	if os.PathSeparator == '\\' {
 		r.urlsFile = r.savePath + "urls.txt"
-		os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
+		err = os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
+		if err != nil {
+			return "", err
+		}
+		fmt.Printf("\n已生成图片URLs文件[%s]\n 可复制到 bookget-gui.exe 目录下，或使用其它软件下载。\n", r.urlsFile)
 		r.do(r.canvases)
 	} else {
 		r.letsGo(r.canvases)

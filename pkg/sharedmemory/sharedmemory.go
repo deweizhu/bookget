@@ -18,11 +18,11 @@ type SharedMemoryData struct {
 	HTMLReady      uint32
 	CookiesReady   uint32
 	ImagePathReady uint32
-	PID            uint32                   // 进程ID
-	URL            [1024]uint16             // wchar_t[1024]
-	HTML           [1024 * 1024 * 10]uint16 // 10MB
-	Cookies        [1024 * 10]uint16        // 10KB
-	ImagePath      [1024]uint16             // wchar_t[1024]
+	PID            uint32                  // 进程ID
+	URL            [1024]uint16            // wchar_t[1024]
+	ImagePath      [1024]uint16            // wchar_t[1024]
+	Cookies        [4096]uint16            // 4KB
+	HTML           [1024 * 1024 * 8]uint16 // 8MB
 }
 
 // 计算共享内存大小（转换为uint32）
