@@ -96,7 +96,13 @@ func (r *LodNLGoKr) Run() (msg string, err error) {
 	webPageUrl := r.ServerUrl + "/nlmivs/viewWonmun_js.jsp?card_class=L&cno=" + r.bookId
 	if util.OpenWebBrowser([]string{"-i", webPageUrl}) {
 		fmt.Println("已启动 bookget-gui 浏览器，请注意完成「真人验证」。")
+		for i := 0; i < 10; i++ {
+			fmt.Printf("等待 bookget-gui 加载完成，还有 %d 秒 \r", 10-i)
+			time.Sleep(time.Second * 1)
+		}
 	}
+	fmt.Println()
+
 	r.bufBody, err = r.getBodyByGui(webPageUrl)
 	if err != nil || r.bufBody == "" {
 		return "[err=getBodyByGui]", err

@@ -91,9 +91,14 @@ func (r *Loc) Run() (msg string, err error) {
 
 	//windows 处理
 	if os.PathSeparator == '\\' {
-		if util.OpenWebBrowser([]string{"-i", apiUrl}) {
-			fmt.Println("已启动 bookget-gui 浏览器，请注意完成「真人验证」。")
+		if util.OpenWebBrowser([]string{"-i", r.rawUrl}) {
+			fmt.Println("已启动 bookget-gui 浏览器，此网站需要安装 windows 客户端控件。")
+			for i := 0; i < 10; i++ {
+				fmt.Printf("等待 bookget-gui 加载完成，还有 %d 秒 \r", 10-i)
+				time.Sleep(time.Second * 1)
+			}
 		}
+		fmt.Println()
 
 		r.bufBody, err = r.getBodyByGui(apiUrl)
 		// 提取JSON部分
