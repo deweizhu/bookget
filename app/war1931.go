@@ -116,7 +116,7 @@ func (r *War1931) do(canvases []string) (msg string, err error) {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(canvases)
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range canvases {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -128,7 +128,7 @@ func (r *War1931) do(canvases []string) (msg string, err error) {
 			continue
 		}
 		log.Printf("Get %s  %s\n", sortId, uri)
-		if err := downloader.Dezoomify(r.ctx, uri, dest, args); err != nil {
+		if err := iiifDownloader.Dezoomify(r.ctx, uri, dest, args); err != nil {
 			log.Printf("Dezoomify %s %s\n", err, uri)
 		}
 	}

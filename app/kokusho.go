@@ -93,7 +93,7 @@ func (p *Kokusho) download() (msg string, err error) {
 
 func (p *Kokusho) do(imgUrls []string) (msg string, err error) {
 	if config.Conf.UseDzi {
-		p.doDezoomifyRs(imgUrls)
+		p.doDezoomify(imgUrls)
 	} else {
 		p.doNormal(imgUrls)
 	}
@@ -177,7 +177,7 @@ func (p *Kokusho) postBody(sUrl string, d []byte) ([]byte, error) {
 	panic("implement me")
 }
 
-func (p *Kokusho) doDezoomifyRs(iiifUrls []string) bool {
+func (p *Kokusho) doDezoomify(iiifUrls []string) bool {
 	if iiifUrls == nil {
 		return false
 	}
@@ -188,7 +188,7 @@ func (p *Kokusho) doDezoomifyRs(iiifUrls []string) bool {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(iiifUrls)
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -200,7 +200,7 @@ func (p *Kokusho) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		downloader.Dezoomify(p.ctx, uri, dest, args)
+		iiifDownloader.Dezoomify(p.ctx, uri, dest, args)
 	}
 	return true
 }

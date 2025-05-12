@@ -3,66 +3,81 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/family"
+	"bookget/pkg/cookie"
 	"bookget/pkg/downloader"
-	"bookget/pkg/gohttp"
 	"bookget/pkg/util"
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type Familysearch struct {
-	dt          *DownloadTask
-	apiUrl      string
+	ctx    context.Context
+	cancel context.CancelFunc
+	client *http.Client
+	dm     *downloader.DownloadManager
+
+	urlsFile   string
+	bufBuilder strings.Builder
+	bufBody    []byte
+	bufString  string
+	canvases   []string
+
+	rawUrl    string
+	parsedUrl *url.URL
+	savePath  string
+	bookId    string
+
 	urlType     int
 	dziTemplate string
-	userAgent   string
 	baseUrl     string
 	sgBaseUrl   string
-
-	ctx context.Context
+	apiUrl      string
 }
 
 func NewFamilysearch() *Familysearch {
+	ctx, cancel := context.WithCancel(context.Background())
+	dm := downloader.NewDownloadManager(ctx, cancel, config.Conf.MaxConcurrent)
+
+	// 创建自定义 Transport 忽略 SSL 验证
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	jar, _ := cookiejar.New(nil)
+
 	return &Familysearch{
 		// 初始化字段
-		dt:  new(DownloadTask),
-		ctx: context.Background(),
+		dm:     dm,
+		client: &http.Client{Timeout: config.Conf.Timeout * time.Second, Jar: jar, Transport: tr},
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
 func (r *Familysearch) GetRouterInit(sUrl string) (map[string]interface{}, error) {
-	msg, err := r.Run(sUrl)
+	r.rawUrl = sUrl
+	r.parsedUrl, _ = url.Parse(r.rawUrl)
+	r.apiUrl = "https://" + r.parsedUrl.Host + "/search/filmdatainfo/image-data"
+	msg, err := r.Run()
 	return map[string]interface{}{
-		"url": sUrl,
-		"msg": msg,
+		"type": "iiif",
+		"url":  sUrl,
+		"msg":  msg,
 	}, err
-}
-
-func (r *Familysearch) Run(sUrl string) (msg string, err error) {
-
-	r.dt.UrlParsed, err = url.Parse(sUrl)
-	r.dt.Url = sUrl
-
-	r.dt.BookId = r.getBookId(r.dt.Url)
-	if r.dt.BookId == "" {
-		return "requested URL was not found.", err
-	}
-	r.baseUrl, r.sgBaseUrl, _ = r.getBaseUrl(r.dt.Url)
-	r.dt.Jar, _ = cookiejar.New(nil)
-	//  "https://www.familysearch.org/search/filmdata/filmdatainfo"
-	//r.apiUrl = r.dt.UrlParsed.Scheme + "://" + r.dt.UrlParsed.Host + "/search/filmdata/filmdatainfo"
-	//https://www.familysearch.org/search/filmdatainfo/image-data
-	r.apiUrl = r.dt.UrlParsed.Scheme + "://" + r.dt.UrlParsed.Host + "/search/filmdatainfo/image-data"
-	WaitNewCookie()
-	return r.download()
 }
 
 func (r *Familysearch) getBookId(sUrl string) (bookId string) {
@@ -73,59 +88,70 @@ func (r *Familysearch) getBookId(sUrl string) (bookId string) {
 	return bookId
 }
 
-func (r *Familysearch) getBaseUrl(sUrl string) (baseUrl, sgBaseUrl string, err error) {
-	cli := gohttp.NewClient(r.ctx, gohttp.Options{
-		CookieFile: config.Conf.CookieFile,
-		CookieJar:  r.dt.Jar,
-		Headers: map[string]interface{}{
-			"User-Agent": config.Conf.UserAgent,
-			"Accept":     "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-		},
-	})
-	resp, err := cli.Get(sUrl)
+func (r *Familysearch) getBaseUrl(sUrl string) (string, string, error) {
+	bs, err := r.getBody(sUrl)
 	if err != nil {
-		return
+		return "", "", err
 	}
-	bs, _ := resp.GetBody()
 
 	//SERVER_DATA.baseUrl = "https://www.familysearch.org";
 	m := regexp.MustCompile(`SERVER_DATA.baseUrl\s=\s"([^"]+)"`).FindSubmatch(bs)
-	baseUrl = string(m[1])
+	baseUrl := string(m[1])
 
 	// SERVER_DATA.sgBaseUrl = "https://sg30p0.familysearch.org"
 	m = regexp.MustCompile(`SERVER_DATA.sgBaseUrl\s=\s"([^"]+)"`).FindSubmatch(bs)
-	sgBaseUrl = string(m[1])
-	return
+	sgBaseUrl := string(m[1])
+	return baseUrl, sgBaseUrl, nil
 }
 
-func (r *Familysearch) download() (msg string, err error) {
-	log.Printf("Get %s\n", r.dt.Url)
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
-	var canvases []string
-	imageData, err := r.getImageData(r.dt.Url)
-	if err != nil {
+func (r *Familysearch) Run() (msg string, err error) {
+	r.bookId = r.getBookId(r.rawUrl)
+	if r.bookId == "" {
+		return "requested URL was not found.", err
+	}
+	if os.PathSeparator == '\\' {
+		if util.OpenWebBrowser([]string{"-i", r.rawUrl}) {
+			fmt.Println("已启动 bookget-gui 浏览器，请注意完成「真人验证」或「账号登录」。")
+			for i := 0; i < 10; i++ {
+				fmt.Printf("等待 bookget-gui 加载完成，还有 %d 秒 \r", 10-i)
+				time.Sleep(time.Second * 1)
+			}
+		}
+		fmt.Println()
+	}
+	r.baseUrl, r.sgBaseUrl, err = r.getBaseUrl(r.rawUrl)
+	if err != nil || r.baseUrl == "" || r.sgBaseUrl == "" {
 		return "", err
 	}
-	canvases, err = r.getFilmData(r.dt.Url, imageData)
-	if err != nil {
-		return "", err
-	}
-	size := len(canvases)
-	log.Printf(" %d pages.\n", size)
 
-	r.do(canvases)
+	imageData, err := r.getImageData(r.apiUrl)
+	if err != nil {
+		return "", err
+	}
+	r.canvases, err = r.getCanvases(r.apiUrl, imageData)
+	if err != nil || r.canvases == nil {
+		return "", err
+	}
+	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
+	r.urlsFile = r.savePath + "urls.txt"
+	err = os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
+	if err != nil {
+		return "", err
+	}
+
+	r.do(r.canvases)
 	return "", nil
 }
 
-func (r *Familysearch) do(iiifUrls []string) (msg string, err error) {
-	if iiifUrls == nil {
-		return
+func (r *Familysearch) do(canvases []string) (err error) {
+	sizeVol := len(canvases)
+	if sizeVol <= 0 {
+		return errors.New("[err=do]")
 	}
-	referer := url.QueryEscape(r.dt.Url)
+	referer := url.QueryEscape(r.rawUrl)
+	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
 
-	cookies := gohttp.ReadCookieFile(config.Conf.CookieFile)
-
-	sid := r.getSessionId()
+	sid := r.getSessionId(cookies)
 	args := []string{
 		"-H", "authority:www.familysearch.org",
 		"-H", "Authorization:" + sid,
@@ -133,44 +159,44 @@ func (r *Familysearch) do(iiifUrls []string) (msg string, err error) {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 		"-H", "cookie:" + cookies,
 	}
-	size := len(iiifUrls)
 	// 创建下载器实例
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
-	downloader.SetDeepZoomTileFormat("{{.ServerURL}}/{{.URL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader.SetDeepZoomTileFormat("{{.ServerURL}}/{{.URL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
 	// 设置固定值
-	downloader.DeepzoomTileFormat.FixedValues = map[string]interface{}{
+	iiifDownloader.DeepzoomTileFormat.FixedValues = map[string]interface{}{
 		//"Level":     12,
 		"Format":    "jpg",
 		"ServerURL": r.sgBaseUrl,
 	}
-	for i, uri := range iiifUrls {
-		if uri == "" || !config.PageRange(i, size) {
+	for i, uri := range canvases {
+		if uri == "" || !config.PageRange(i, sizeVol) {
 			continue
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
-		dest := r.dt.SavePath + sortId + config.Conf.FileExt
+		dest := r.savePath + sortId + config.Conf.FileExt
 		if FileExist(dest) {
 			continue
 		}
-		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		downloader.Dezoomify(r.ctx, uri, dest, args)
+		log.Printf("Get %d/%d  %s\n", i+1, sizeVol, uri)
+		iiifDownloader.Dezoomify(r.ctx, uri, dest, args)
 		util.PrintSleepTime(config.Conf.Speed)
 	}
-	return "", err
+	return err
 }
 
 func (r *Familysearch) getImageData(sUrl string) (imageData family.ImageData, err error) {
 
 	var data = family.ReqData{}
 	data.Type = "image-data"
-	data.Args.ImageURL = sUrl
+	data.Args.ImageURL = r.rawUrl
 	data.Args.State.ImageOrFilmUrl = ""
 	data.Args.State.ViewMode = "i"
 	data.Args.State.SelectedImageIndex = -1
 	data.Args.Locale = "zh"
 
-	bs, err := r.postJson(r.apiUrl, data)
+	bs, err := r.postBody(sUrl, data)
 	if err != nil {
+		fmt.Println("请求失败，cookie 可能已失效。")
 		return
 	}
 	var resultError family.ResultError
@@ -194,7 +220,7 @@ func (r *Familysearch) getImageData(sUrl string) (imageData family.ImageData, er
 	return imageData, nil
 }
 
-func (r *Familysearch) getFilmData(sUrl string, imageData family.ImageData) (canvases []string, err error) {
+func (r *Familysearch) getCanvases(sUrl string, imageData family.ImageData) (canvases []string, err error) {
 
 	u, err := url.Parse(imageData.ImageURL)
 	if err != nil {
@@ -211,9 +237,9 @@ func (r *Familysearch) getFilmData(sUrl string, imageData family.ImageData) (can
 	data.Args.State.SelectedImageIndex = -1
 	data.Args.Locale = "zh"
 	data.Args.LoggedIn = true
-	data.Args.SessionId = r.getSessionId()
+	data.Args.SessionId = r.getSessionId(cookie.CookiesFromFile(config.Conf.CookieFile))
 
-	bs, err := r.postJson(r.apiUrl, data)
+	bs, err := r.postBody(sUrl, data)
 	if err != nil {
 		return
 	}
@@ -240,34 +266,13 @@ func (r *Familysearch) getFilmData(sUrl string, imageData family.ImageData) (can
 		xmlUrl := fmt.Sprintf(r.dziTemplate, m[1], "image.xml")
 		canvases = append(canvases, xmlUrl)
 
+		r.bufBuilder.WriteString(xmlUrl)
+		r.bufBuilder.WriteString("\n")
 	}
 	return canvases, err
 }
 
-func (r *Familysearch) postJson(sUrl string, data interface{}) ([]byte, error) {
-	cli := gohttp.NewClient(r.ctx, gohttp.Options{
-		CookieFile: config.Conf.CookieFile,
-		CookieJar:  r.dt.Jar,
-		Headers: map[string]interface{}{
-			"User-Agent":   config.Conf.UserAgent,
-			"Content-Type": "application/json",
-			"authority":    "www.familysearch.org",
-			"origin":       r.baseUrl,
-			"referer":      r.dt.Url,
-		},
-		JSON: data,
-	})
-	resp, err := cli.Post(sUrl)
-	if err != nil {
-		return nil, err
-	}
-	bs, _ := resp.GetBody()
-	return bs, err
-}
-
-func (r *Familysearch) getSessionId() string {
-	bs, _ := os.ReadFile(config.Conf.CookieFile)
-	cookies := string(bs)
+func (r *Familysearch) getSessionId(cookies string) string {
 	//fssessionid=e10ce618-f7f7-45de-b2c3-d1a31d080d58-prod;
 	m := regexp.MustCompile(`fssessionid=([^;]+);`).FindStringSubmatch(cookies)
 	if m != nil {
@@ -276,48 +281,110 @@ func (r *Familysearch) getSessionId() string {
 	return ""
 }
 
-func (r *Familysearch) postBody(sUrl string, data []byte) ([]byte, error) {
-	sid := r.getSessionId()
-	cli := gohttp.NewClient(r.ctx, gohttp.Options{
-		CookieFile: config.Conf.CookieFile,
-		CookieJar:  r.dt.Jar,
-		Headers: map[string]interface{}{
-			"User-Agent":    config.Conf.UserAgent,
-			"Content-Type":  "application/json",
-			"authority":     "www.familysearch.org",
-			"origin":        r.baseUrl,
-			"authorization": sid,
-			"referer":       r.dt.Url,
-		},
-		Body: data,
-	})
-	resp, err := cli.Post(sUrl)
+func (r *Familysearch) getBody(sUrl string) ([]byte, error) {
+	req, err := http.NewRequest("GET", sUrl, nil)
 	if err != nil {
 		return nil, err
 	}
-	bs, _ := resp.GetBody()
-	return bs, err
+	req.Header.Set("User-Agent", config.Conf.UserAgent)
+	req.Header.Set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("authority", "www.familysearch.org")
+	req.Header.Set("origin", r.baseUrl)
+	req.Header.Set("referer", r.rawUrl)
+
+	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	if cookies != "" {
+		req.Header.Set("Cookie", cookies)
+		//sid := r.getSessionId(cookies)
+		//req.Header.Set("authorization", sid)
+	}
+
+	resp, err := r.client.Do(req.WithContext(r.ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("close body err=%v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		err = fmt.Errorf("服务器返回错误状态码: %d", resp.StatusCode)
+		return nil, err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
-func (r *Familysearch) getBody(apiUrl string, jar *cookiejar.Jar) ([]byte, error) {
-	cli := gohttp.NewClient(r.ctx, gohttp.Options{
-		CookieFile: config.Conf.CookieFile,
-		CookieJar:  jar,
-		Headers: map[string]interface{}{
-			"User-Agent":   config.Conf.UserAgent,
-			"Content-Type": "application/json",
-			"authority":    "www.familysearch.org",
-			"origin":       r.baseUrl,
-			"referer":      r.dt.Url,
-		},
-	})
-	resp, err := cli.Get(apiUrl)
+func (r *Familysearch) postBody(sUrl string, postData interface{}) ([]byte, error) {
+	var bodyData []byte
+	var err error
+
+	var isJSON = false
+	// 根据传入的数据类型处理
+	switch v := postData.(type) {
+	case []byte:
+		bodyData = v // 直接使用 []byte
+	case string:
+		bodyData = []byte(v) // 将 string 转为 []byte
+	default:
+		// 其他类型尝试转为 JSON
+		bodyData, err = json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal JSON data: %v", err)
+		}
+		isJSON = true
+	}
+	req, err := http.NewRequest("POST", sUrl, bytes.NewBuffer(bodyData))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
-	bs, _ := resp.GetBody()
-	if resp.GetStatusCode() == 202 || bs == nil {
-		return nil, errors.New(fmt.Sprintf("ErrCode:%d, %s", resp.GetStatusCode(), resp.GetReasonPhrase()))
+	// 设置请求头
+	req.Header.Set("User-Agent", config.Conf.UserAgent)
+	if isJSON {
+		req.Header.Set("accept", "application/json, text/plain, */*")
+		req.Header.Set("Content-Type", "application/json")
+	} else {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
-	return bs, nil
+	req.Header.Set("authority", "www.familysearch.org")
+	req.Header.Set("origin", r.baseUrl)
+	req.Header.Set("referer", r.rawUrl)
+
+	// 添加cookie
+	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	if cookies != "" {
+		req.Header.Set("Cookie", cookies)
+		sid := r.getSessionId(cookies)
+		req.Header.Set("authorization", sid)
+	}
+
+	// 发送请求
+	resp, err := r.client.Do(req.WithContext(r.ctx))
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %v", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
+
+	// 检查响应状态码
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// 读取响应体
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	return body, nil
 }

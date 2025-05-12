@@ -3,63 +3,76 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/iiif"
+	"bookget/pkg/cookie"
 	"bookget/pkg/downloader"
-	"bookget/pkg/gohttp"
+	"bookget/pkg/progressbar"
+	"bookget/pkg/sharedmemory"
 	"bookget/pkg/util"
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type Harvard struct {
-	dt    *DownloadTask
-	drsId string
-	ctx   context.Context
+	ctx    context.Context
+	cancel context.CancelFunc
+	client *http.Client
+	dm     *downloader.DownloadManager
+
+	tmpFile    string
+	urlsFile   string
+	bufBuilder strings.Builder
+	bufBody    []byte
+	bufString  string
+	canvases   []string
+
+	rawUrl    string
+	parsedUrl *url.URL
+	savePath  string
+	bookId    string
 }
 
 func NewHarvard() *Harvard {
+	ctx, cancel := context.WithCancel(context.Background())
+	dm := downloader.NewDownloadManager(ctx, cancel, config.Conf.MaxConcurrent)
+
+	// 创建自定义 Transport 忽略 SSL 验证
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	jar, _ := cookiejar.New(nil)
 	return &Harvard{
 		// 初始化字段
-		dt:  new(DownloadTask),
-		ctx: context.Background(),
+		dm:     dm,
+		client: &http.Client{Timeout: config.Conf.Timeout * time.Second, Jar: jar, Transport: tr},
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
 func (r *Harvard) GetRouterInit(sUrl string) (map[string]interface{}, error) {
-	msg, err := r.Run(sUrl)
+	r.rawUrl = sUrl
+	r.parsedUrl, _ = url.Parse(r.rawUrl)
+	msg, err := r.Run()
 	return map[string]interface{}{
 		"type": "iiif",
 		"url":  sUrl,
 		"msg":  msg,
 	}, err
-}
-
-func (r *Harvard) Run(sUrl string) (msg string, err error) {
-	if strings.Contains(sUrl, "curiosity.lib.harvard.edu") {
-		bs, err := r.getBody(sUrl, nil)
-		if err != nil {
-			return "", err
-		}
-		m := regexp.MustCompile(`manifestId=([^“]+?)"`).FindSubmatch(bs)
-		if m != nil {
-			sUrl = string(m[1])
-		}
-	}
-	r.dt.UrlParsed, err = url.Parse(sUrl)
-	r.dt.Url = sUrl
-	r.dt.BookId = r.getBookId(r.dt.Url)
-	if r.dt.BookId == "" {
-		return "requested URL was not found.", err
-	}
-	r.dt.Jar, _ = cookiejar.New(nil)
-	//WaitNewCookie()
-	return r.download()
 }
 
 func (r *Harvard) getBookId(sUrl string) (bookId string) {
@@ -71,101 +84,68 @@ func (r *Harvard) getBookId(sUrl string) (bookId string) {
 	if m != nil {
 		return m[1]
 	}
-	//https://listview.lib.harvard.edu/lists/drs-54194370
-	m = regexp.MustCompile(`/lists/([A-z0-9-_:]+)`).FindStringSubmatch(sUrl)
-	if m != nil {
-		return m[1]
-	}
 	return ""
 }
 
-func (r *Harvard) download() (msg string, err error) {
-	_, err = r.tryEmail(r.dt.Url, r.dt.Jar)
+func (r *Harvard) Run() (msg string, err error) {
+	r.bookId = r.getBookId(r.rawUrl)
+	if r.bookId == "" {
+		return "requested URL was not found.", err
+	}
+
+	if os.PathSeparator == '\\' {
+		if util.OpenWebBrowser([]string{"-i", r.rawUrl}) {
+			fmt.Println("已启动 bookget-gui 浏览器，请注意完成「真人验证」。")
+			for i := 0; i < 10; i++ {
+				fmt.Printf("等待 bookget-gui 加载完成，还有 %d 秒 \r", 10-i)
+				time.Sleep(time.Second * 1)
+			}
+		}
+		fmt.Println()
+	}
+
+	r.canvases, err = r.getCanvases()
+	if err != nil || r.canvases == nil {
+		return "", err
+	}
+	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
+	r.urlsFile = r.savePath + "urls.txt"
+	err = os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
 	if err != nil {
 		return "", err
 	}
+	fmt.Printf("\n已生成图片URLs文件[%s]\n 可复制到 bookget-gui.exe 目录下，或使用其它软件下载。\n", r.urlsFile)
 
-	log.Printf("Get %s\n", r.dt.Url)
-
-	respVolume, err := r.getVolumes(r.dt.Url, r.dt.Jar)
-	if err != nil {
-		fmt.Println(err)
-		return "getVolumes", err
-	}
-	sizeVol := len(respVolume)
-	for i, vol := range respVolume {
-		if !config.VolumeRange(i) {
-			continue
-		}
-		if sizeVol == 1 {
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
-		} else {
-			vid := fmt.Sprintf("%04d", i+1)
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
-		}
-
-		canvases, err := r.getCanvases(vol, r.dt.Jar)
-		if err != nil || canvases == nil {
-			fmt.Println(err)
-			continue
-		}
-		log.Printf(" %d/%d volume, %d pages \n", i+1, sizeVol, len(canvases))
-		r.do(canvases)
-	}
+	r.do(r.canvases)
 	return "", nil
 }
 
-func (r *Harvard) do(imgUrls []string) (msg string, err error) {
+func (r *Harvard) do(imgUrls []string) (err error) {
+	if os.PathSeparator == '\\' {
+		return r.doByGUI(imgUrls)
+	}
 	if config.Conf.UseDzi {
-		r.doDezoomifyRs(imgUrls)
-	} else {
-		r.doNormal(imgUrls)
+		return r.doDezoomify(imgUrls)
 	}
-	return "", err
+	return r.doNormal(imgUrls)
 }
 
-func (r *Harvard) getVolumes(sUrl string, jar *cookiejar.Jar) (volumes []string, err error) {
-	if strings.Contains(sUrl, "listview.lib.harvard.edu") {
-		bs, err := r.getBody(sUrl, nil)
-		if err != nil {
-			return nil, err
-		}
-		matches := regexp.MustCompile(`target="_blank" href="https://nrs.harvard.edu([^"]+)"`).FindAllSubmatch(bs, -1)
-		if matches == nil {
-			return nil, err
-		}
-		for _, m := range matches {
-			volUrl := "https://nrs.harvard.edu" + strings.Replace(string(m[1]), "//", "/", -1)
-			volumes = append(volumes, volUrl)
-		}
-	} else if strings.Contains(sUrl, "iiif.lib.harvard.edu") {
-		volumes = append(volumes, sUrl)
-	}
-	return volumes, nil
-}
-
-func (r *Harvard) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string, err error) {
-	var manifestUri = sUrl
-	if strings.Contains(sUrl, "iiif.lib.harvard.edu/manifests/view/") ||
-		strings.Contains(sUrl, "nrs.harvard.edu") {
-		bs, err := r.getBody(sUrl, jar)
-		if err != nil {
-			return nil, err
-		}
-		//"manifestUri": "https://iiif.lib.harvard.edu/manifests/drs:428501920"
-		match := regexp.MustCompile(`"manifestUri":[\s+]"([^"]+?)"`).FindSubmatch(bs)
-		if match != nil {
-			manifestUri = string(match[1])
-		} else {
-			return nil, errors.New("requested URL was not found.")
-		}
-	}
-	bs, err := r.getBody(manifestUri, jar)
+func (r *Harvard) getCanvases() (canvases []string, err error) {
+	var manifestUri = "https://" + r.parsedUrl.Host + "/manifests/" + r.bookId
+	r.bufBody, err = r.tryGetBody(manifestUri)
 	if err != nil {
 		return
 	}
+	// 提取JSON部分
+	start := bytes.Index(r.bufBody, []byte("<pre>")) + 5
+	end := bytes.Index(r.bufBody, []byte("</pre>"))
+	if start <= 0 || end <= 0 {
+		return nil, err
+	}
+	r.bufBody = r.bufBody[start:end]
+
 	var manifest = new(iiif.ManifestResponse)
-	if err = json.Unmarshal(bs, manifest); err != nil {
+	if err = json.Unmarshal(r.bufBody, manifest); err != nil {
 		log.Printf("json.Unmarshal failed: %s\n", err)
 		return
 	}
@@ -176,127 +156,253 @@ func (r *Harvard) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []strin
 	canvases = make([]string, 0, size)
 	for _, canvase := range manifest.Sequences[0].Canvases {
 		for _, image := range canvase.Images {
-			if config.Conf.UseDzi {
-				//dezoomify-rs URL
-				iiiInfo := fmt.Sprintf("%s/info.json", image.Resource.Service.Id)
+			//JPEG URL
+			imgUrl := image.Resource.Service.Id + "/" + config.Conf.Format
+			//dezoomify-rs URL
+			iiiInfo := fmt.Sprintf("%s/info.json", image.Resource.Service.Id)
+			if config.Conf.UseDzi && os.PathSeparator != '\\' {
 				canvases = append(canvases, iiiInfo)
 			} else {
-				//JPEG URL
-				imgUrl := image.Resource.Service.Id + "/" + config.Conf.Format
 				canvases = append(canvases, imgUrl)
 			}
+			r.bufBuilder.WriteString(imgUrl)
+			r.bufBuilder.WriteString("\n")
 		}
 	}
 	return canvases, nil
 
 }
 
-func (r *Harvard) getBody(sUrl string, jar *cookiejar.Jar) ([]byte, error) {
-	referer := url.QueryEscape(sUrl)
-	ctx := context.Background()
-	cli := gohttp.NewClient(ctx, gohttp.Options{
-		CookieFile: config.Conf.CookieFile,
-		CookieJar:  jar,
-		Headers: map[string]interface{}{
-			"User-Agent": config.Conf.UserAgent,
-			"Referer":    referer,
-		},
-	})
-	resp, err := cli.Get(sUrl)
-	if err != nil {
-		return nil, err
+func (r *Harvard) doDezoomify(canvases []string) (err error) {
+	sizeVol := len(canvases)
+	if sizeVol <= 0 {
+		return errors.New("[err=doByGUI]")
 	}
-	bs, _ := resp.GetBody()
-	if resp.GetStatusCode() != 200 || bs == nil {
-		return nil, errors.New(fmt.Sprintf("ErrCode:%d, %s", resp.GetStatusCode(), resp.GetReasonPhrase()))
-	}
-	return bs, nil
-}
-
-func (r *Harvard) postBody(sUrl string, d []byte) ([]byte, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (r *Harvard) doDezoomifyRs(iiifUrls []string) bool {
-	if iiifUrls == nil {
-		return false
-	}
-	referer := url.QueryEscape(r.dt.Url)
-	size := len(iiifUrls)
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
-	for i, uri := range iiifUrls {
-		if uri == "" || !config.PageRange(i, size) {
+	referer := url.QueryEscape(r.rawUrl)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
+	for i, uri := range canvases {
+		if uri == "" || !config.PageRange(i, sizeVol) {
 			continue
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := r.savePath + filename
 		if FileExist(dest) {
 			continue
 		}
-		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		cookies := gohttp.ReadCookieFile(config.Conf.CookieFile)
+		log.Printf("Get %d/%d  %s\n", i+1, sizeVol, uri)
+		cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
 		args := []string{
 			"-H", "Origin:" + referer,
 			"-H", "Referer:" + referer,
 			"-H", "User-Agent:" + config.Conf.UserAgent,
 			"-H", "cookie:" + cookies,
 		}
-		downloader.Dezoomify(r.ctx, uri, dest, args)
+		iiifDownloader.Dezoomify(r.ctx, uri, dest, args)
 	}
-	return true
+	return nil
 }
 
-func (r *Harvard) doNormal(imgUrls []string) bool {
-	if imgUrls == nil {
-		return false
+func (r *Harvard) doNormal(canvases []string) (err error) {
+	sizeVol := len(canvases)
+	if sizeVol <= 0 {
+		return errors.New("[err=doNormal]")
 	}
-	size := len(imgUrls)
 	fmt.Println()
-	ctx := context.Background()
-	for i, uri := range imgUrls {
-		if uri == "" || !config.PageRange(i, size) {
+	counter := 0
+	for i, imgUrl := range canvases {
+		if imgUrl == "" || !config.PageRange(i, sizeVol) {
 			continue
 		}
-		ext := util.FileExt(uri)
+		ext := util.FileExt(imgUrl)
 		sortId := fmt.Sprintf("%04d", i+1)
-		filename := sortId + ext
-		dest := r.dt.SavePath + filename
+		fileName := sortId + ext
+		dest := r.savePath + fileName
 		if FileExist(dest) {
 			continue
 		}
-		fmt.Println()
-		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		opts := gohttp.Options{
-			DestFile:    dest,
-			Overwrite:   false,
-			Concurrency: 1,
-			CookieFile:  config.Conf.CookieFile,
-			CookieJar:   r.dt.Jar,
-			Headers: map[string]interface{}{
-				"User-Agent": config.Conf.UserAgent,
-			},
-		}
-		for k := 0; k < config.Conf.Retries; k++ {
-			resp, err := gohttp.FastGet(ctx, uri, opts)
-			if err == nil && resp.GetStatusCode() == 200 {
-				break
-			}
-			WaitNewCookieWithMsg(uri)
-		}
-		util.PrintSleepTime(config.Conf.Speed)
-		fmt.Println()
+		// 添加GET下载任务
+		r.dm.AddTask(
+			imgUrl,
+			"GET",
+			map[string]string{"User-Agent": config.Conf.UserAgent},
+			nil,
+			r.savePath,
+			fileName,
+			config.Conf.Threads,
+		)
+		counter++
 
 	}
 	fmt.Println()
-	return true
+	r.dm.SetBar(counter)
+	r.dm.Start()
+	return nil
 }
 
-func (r *Harvard) tryEmail(sUrl string, jar *cookiejar.Jar) (bs []byte, err error) {
-	bs, err = r.getBody(sUrl, jar)
-	if err != nil {
-		fmt.Println("当前地区 IP 受限访问，请使用其它方法。该站可使用Email接收PDF。详见网页 “Print/Save” PDF\n")
+func (r *Harvard) doByGUI(canvases []string) (err error) {
+	sizeVol := len(canvases)
+	if sizeVol <= 0 {
+		return errors.New("[err=doByGUI]")
 	}
-	return bs, err
+	fmt.Println()
+	bar := progressbar.Default(int64(sizeVol), "downloading")
+	for i, imgUrl := range canvases {
+		i++
+		sortId := fmt.Sprintf("%04d", i)
+		fileName := sortId + config.Conf.FileExt
+
+		if imgUrl == "" || !config.PageRange(i, sizeVol) {
+			bar.Add(1)
+			continue
+		}
+		//跳过存在的文件
+		targetFilePath := r.savePath + fileName
+		if FileExist(r.savePath + fileName) {
+			bar.Add(1)
+			continue
+		}
+
+		ok, err := r.imageDownloader(imgUrl, targetFilePath)
+		if err == nil && ok {
+			bar.Add(1)
+		}
+	}
+	fmt.Println()
+	return nil
+}
+
+func (r *Harvard) tryGetBody(sUrl string) (bs []byte, err error) {
+	if os.PathSeparator == '\\' {
+		return r.getBodyByGui(sUrl)
+	}
+	return r.getBody(sUrl)
+}
+
+func (r *Harvard) getBodyByGui(apiUrl string) (bs []byte, err error) {
+	err = sharedmemory.WriteURLToSharedMemory(apiUrl)
+	if err != nil {
+		fmt.Println("Failed to write to shared memory:", err)
+		return
+	}
+	for i := 0; i < 300; i++ {
+		time.Sleep(time.Second * 1)
+		r.bufString, err = sharedmemory.ReadHTMLFromSharedMemory()
+		if err == nil && r.bufString != "" && strings.Contains(r.bufString, "http://iiif.io/api/") {
+			break
+		}
+	}
+	r.bufBody = []byte(r.bufString)
+	return r.bufBody, nil
+}
+
+func (r *Harvard) imageDownloader(imgUrl, targetFilePath string) (ok bool, err error) {
+	err = sharedmemory.WriteURLImagePathToSharedMemory(imgUrl, targetFilePath)
+	if err != nil {
+		fmt.Println("Failed to write to shared memory:", err)
+		return
+	}
+	for i := 0; i < 300; i++ {
+		time.Sleep(time.Second * 1)
+		ok, err = sharedmemory.ReadImageReadyFromSharedMemory()
+		if err != nil || !ok {
+			continue
+		}
+		break
+	}
+	return ok, nil
+}
+
+func (r *Harvard) getBody(sUrl string) ([]byte, error) {
+	req, err := http.NewRequest("GET", sUrl, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", config.Conf.UserAgent)
+	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	if cookies != "" {
+		req.Header.Set("Cookie", cookies)
+	}
+
+	resp, err := r.client.Do(req.WithContext(r.ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("close body err=%v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		err = fmt.Errorf("服务器返回错误状态码: %d", resp.StatusCode)
+		return nil, err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+func (r *Harvard) postBody(sUrl string, postData interface{}) ([]byte, error) {
+	var bodyData []byte
+	var err error
+
+	var isJSON = false
+	// 根据传入的数据类型处理
+	switch v := postData.(type) {
+	case []byte:
+		bodyData = v // 直接使用 []byte
+	case string:
+		bodyData = []byte(v) // 将 string 转为 []byte
+	default:
+		// 其他类型尝试转为 JSON
+		bodyData, err = json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal JSON data: %v", err)
+		}
+		isJSON = true
+	}
+	req, err := http.NewRequest("POST", sUrl, bytes.NewBuffer(bodyData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	// 设置请求头
+	req.Header.Set("User-Agent", config.Conf.UserAgent)
+	if isJSON {
+		req.Header.Set("Content-Type", "application/json")
+	} else {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	// 添加cookie
+	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	if cookies != "" {
+		req.Header.Set("Cookie", cookies)
+	}
+
+	// 发送请求
+	resp, err := r.client.Do(req.WithContext(r.ctx))
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %v", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
+
+	// 检查响应状态码
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// 读取响应体
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	return body, nil
 }

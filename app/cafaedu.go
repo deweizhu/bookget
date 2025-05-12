@@ -123,7 +123,7 @@ func (r *CafaEdu) download() (msg string, err error) {
 
 func (r *CafaEdu) do(imgUrls []string) (msg string, err error) {
 	if config.Conf.UseDzi {
-		r.doDezoomifyRs(imgUrls)
+		r.doDezoomify(imgUrls)
 	} else {
 		r.doNormal(imgUrls)
 	}
@@ -207,7 +207,7 @@ func (r *CafaEdu) getMediaImageId(sUrl string, jar *cookiejar.Jar) (iiifId strin
 	return iiifId, err
 }
 
-func (r *CafaEdu) doDezoomifyRs(iiifUrls []string) bool {
+func (r *CafaEdu) doDezoomify(iiifUrls []string) bool {
 	if iiifUrls == nil {
 		return false
 	}
@@ -219,7 +219,7 @@ func (r *CafaEdu) doDezoomifyRs(iiifUrls []string) bool {
 	}
 	size := len(iiifUrls)
 	// 创建下载器实例
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -231,7 +231,7 @@ func (r *CafaEdu) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		downloader.Dezoomify(r.ctx, uri, dest, args)
+		iiifDownloader.Dezoomify(r.ctx, uri, dest, args)
 	}
 	return true
 }

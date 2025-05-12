@@ -95,7 +95,7 @@ func (i *IIIF) download() (msg string, err error) {
 
 func (i *IIIF) do(imgUrls []string) (msg string, err error) {
 	if config.Conf.UseDzi {
-		i.doDezoomifyRs(imgUrls)
+		i.doDezoomify(imgUrls)
 	} else {
 		i.doNormal(imgUrls)
 	}
@@ -191,7 +191,7 @@ func (i *IIIF) getBody(sUrl string, jar *cookiejar.Jar) ([]byte, error) {
 	return bs, nil
 }
 
-func (i *IIIF) doDezoomifyRs(iiifUrls []string) bool {
+func (i *IIIF) doDezoomify(iiifUrls []string) bool {
 	if iiifUrls == nil {
 		return false
 	}
@@ -202,7 +202,7 @@ func (i *IIIF) doDezoomifyRs(iiifUrls []string) bool {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(iiifUrls)
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
 	for k, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(k, size) {
 			continue
@@ -216,7 +216,7 @@ func (i *IIIF) doDezoomifyRs(iiifUrls []string) bool {
 		}
 		log.Printf("Get %d/%d  %s\n", k+1, size, uri)
 
-		err := downloader.Dezoomify(i.ctx, uri, dest, args)
+		err := iiifDownloader.Dezoomify(i.ctx, uri, dest, args)
 		if err != nil {
 			log.Printf("\nDezoomify failed: %s\n", err)
 		}

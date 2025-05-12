@@ -91,7 +91,7 @@ func (r *Berlin) download() (msg string, err error) {
 
 func (r *Berlin) do(imgUrls []string) (msg string, err error) {
 	if config.Conf.UseDzi {
-		r.doDezoomifyRs(imgUrls)
+		r.doDezoomify(imgUrls)
 	} else {
 		r.doNormal(imgUrls)
 	}
@@ -167,7 +167,7 @@ func (r *Berlin) postBody(sUrl string, d []byte) ([]byte, error) {
 	panic("implement me")
 }
 
-func (r *Berlin) doDezoomifyRs(iiifUrls []string) bool {
+func (r *Berlin) doDezoomify(iiifUrls []string) bool {
 	if iiifUrls == nil {
 		return false
 	}
@@ -179,7 +179,7 @@ func (r *Berlin) doDezoomifyRs(iiifUrls []string) bool {
 	}
 	size := len(iiifUrls)
 	// 创建下载器实例
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -191,7 +191,7 @@ func (r *Berlin) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		downloader.Dezoomify(r.ctx, uri, dest, args)
+		iiifDownloader.Dezoomify(r.ctx, uri, dest, args)
 	}
 	return true
 }

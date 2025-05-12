@@ -79,14 +79,14 @@ func (r *Khirin) download() (msg string, err error) {
 
 func (r *Khirin) do(canvases []string) (msg string, err error) {
 	if config.Conf.UseDzi {
-		r.doDezoomifyRs(canvases)
+		r.doDezoomify(canvases)
 	} else {
 		r.doNormal(canvases)
 	}
 	return "", err
 }
 
-func (r *Khirin) doDezoomifyRs(canvases []string) bool {
+func (r *Khirin) doDezoomify(canvases []string) bool {
 	if canvases == nil {
 		return false
 	}
@@ -97,7 +97,7 @@ func (r *Khirin) doDezoomifyRs(canvases []string) bool {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(canvases)
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range canvases {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -117,7 +117,7 @@ func (r *Khirin) doDezoomifyRs(canvases []string) bool {
 		}
 		log.Printf("Get %s  %s\n", sortId, uri)
 
-		if err := downloader.Dezoomify(r.ctx, inputUri, dest, args); err == nil {
+		if err := iiifDownloader.Dezoomify(r.ctx, inputUri, dest, args); err == nil {
 			os.Remove(inputUri)
 		}
 	}

@@ -89,7 +89,7 @@ func (r *Bluk) download() (msg string, err error) {
 
 func (r *Bluk) do(imgUrls []string) (msg string, err error) {
 	if config.Conf.UseDzi {
-		r.doDezoomifyRs(imgUrls)
+		r.doDezoomify(imgUrls)
 	} else {
 		r.doNormal(imgUrls)
 	}
@@ -157,7 +157,7 @@ func (r *Bluk) postBody(sUrl string, d []byte) ([]byte, error) {
 	panic("implement me")
 }
 
-func (r *Bluk) doDezoomifyRs(iiifUrls []string) bool {
+func (r *Bluk) doDezoomify(iiifUrls []string) bool {
 	if iiifUrls == nil {
 		return false
 	}
@@ -169,7 +169,7 @@ func (r *Bluk) doDezoomifyRs(iiifUrls []string) bool {
 	}
 	size := len(iiifUrls)
 	// 创建下载器实例
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -181,7 +181,7 @@ func (r *Bluk) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		downloader.Dezoomify(r.ctx, uri, dest, args)
+		iiifDownloader.Dezoomify(r.ctx, uri, dest, args)
 
 	}
 	return true

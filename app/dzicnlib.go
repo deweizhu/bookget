@@ -87,15 +87,15 @@ func (r DziCnLib) dezoomify() (msg string, err error) {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(r.Canvases)
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
-	err = downloader.SetDeepZoomTileFormat("{{.ServerURL}}/{{.Level}}/{{.X}}/{{.Y}}.{{.Format}}")
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
+	err = iiifDownloader.SetDeepZoomTileFormat("{{.ServerURL}}/{{.Level}}/{{.X}}/{{.Y}}.{{.Format}}")
 	if err != nil {
 		return "[err=SetDeepZoomTileFormat]", err
 	}
 	// 有些不规范的JPG/jpg扩展名服务器，直接用配置文件指定
 	ext := config.Conf.FileExt[1:]
 	// 设置固定值
-	downloader.DeepzoomTileFormat.FixedValues = map[string]interface{}{
+	iiifDownloader.DeepzoomTileFormat.FixedValues = map[string]interface{}{
 		"Level":  0,
 		"Format": ext,
 	}
@@ -109,9 +109,9 @@ func (r DziCnLib) dezoomify() (msg string, err error) {
 			continue
 		}
 
-		err = downloader.DezoomifyWithContent(r.ctx, xml, outputPath, args)
+		err = iiifDownloader.DezoomifyWithContent(r.ctx, xml, outputPath, args)
 		if err != nil {
-			return "[err=downloader.Dezoomify]", err
+			return "[err=iiifDownloader.Dezoomify]", err
 		}
 		util.PrintSleepTime(config.Conf.Speed)
 	}

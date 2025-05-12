@@ -97,7 +97,7 @@ func (r *SiEdu) do(iiifUrls []string) (msg string, err error) {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(iiifUrls)
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -117,7 +117,7 @@ func (r *SiEdu) do(iiifUrls []string) (msg string, err error) {
 			continue
 		}
 		log.Printf("Get %s  %s\n", sortId, uri)
-		if err := downloader.Dezoomify(r.ctx, inputUri, dest, args); err == nil {
+		if err := iiifDownloader.Dezoomify(r.ctx, inputUri, dest, args); err == nil {
 			os.Remove(inputUri)
 		}
 	}

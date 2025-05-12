@@ -90,7 +90,7 @@ func (r *Stanford) download() (msg string, err error) {
 
 func (r *Stanford) do(imgUrls []string) (msg string, err error) {
 	if config.Conf.UseDzi {
-		r.doDezoomifyRs(imgUrls)
+		r.doDezoomify(imgUrls)
 	} else {
 		r.doNormal(imgUrls)
 	}
@@ -157,7 +157,7 @@ func (r *Stanford) getBody(sUrl string, jar *cookiejar.Jar) ([]byte, error) {
 	return bs, nil
 }
 
-func (r *Stanford) doDezoomifyRs(iiifUrls []string) bool {
+func (r *Stanford) doDezoomify(iiifUrls []string) bool {
 	if iiifUrls == nil {
 		return false
 	}
@@ -168,7 +168,7 @@ func (r *Stanford) doDezoomifyRs(iiifUrls []string) bool {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(iiifUrls)
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -180,7 +180,7 @@ func (r *Stanford) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		downloader.Dezoomify(r.ctx, uri, dest, args)
+		iiifDownloader.Dezoomify(r.ctx, uri, dest, args)
 	}
 	return true
 }

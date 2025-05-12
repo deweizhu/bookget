@@ -94,7 +94,7 @@ func (d *Emuseum) download() (msg string, err error) {
 
 func (d *Emuseum) do(imgUrls []string) (msg string, err error) {
 	if config.Conf.UseDzi {
-		d.doDezoomifyRs(imgUrls)
+		d.doDezoomify(imgUrls)
 	} else {
 		d.doNormal(imgUrls)
 	}
@@ -173,7 +173,7 @@ func (d *Emuseum) getBody(sUrl string, jar *cookiejar.Jar) ([]byte, error) {
 	return bs, nil
 }
 
-func (d *Emuseum) doDezoomifyRs(iiifUrls []string) bool {
+func (d *Emuseum) doDezoomify(iiifUrls []string) bool {
 	if iiifUrls == nil {
 		return false
 	}
@@ -184,7 +184,7 @@ func (d *Emuseum) doDezoomifyRs(iiifUrls []string) bool {
 		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(iiifUrls)
-	downloader := downloader.NewIIIFDownloader(&config.Conf)
+	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
 	for i, uri := range iiifUrls {
 		if uri == "" || !config.PageRange(i, size) {
 			continue
@@ -196,7 +196,7 @@ func (d *Emuseum) doDezoomifyRs(iiifUrls []string) bool {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, size, uri)
-		downloader.Dezoomify(d.ctx, uri, dest, args)
+		iiifDownloader.Dezoomify(d.ctx, uri, dest, args)
 	}
 	return true
 }
