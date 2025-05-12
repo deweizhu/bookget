@@ -1,3 +1,5 @@
+//go:build windows
+
 package util
 
 import (
@@ -96,67 +98,32 @@ func PrintSleepTime(sec int) {
 	fmt.Println()
 }
 
-//func StartProcess(inputUri string, outfile string, args []string) bool {
-//	if os.PathSeparator == '\\' {
-//		return runOsWin(inputUri, outfile, args)
-//	} else {
-//		return runOsLinux(inputUri, outfile, args)
-//	}
-//}
-
-//func runOsLinux(inputUri string, outfile string, args []string) bool {
-//	procAttr := &os.ProcAttr{
-//		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-//	}
-//	userArgs := strings.Split(config.Conf.DezoomifyRs, " ")
-//	argv := []string{""}
-//	if userArgs != nil {
-//		argv = append(argv, userArgs...)
-//	}
-//	if args != nil {
-//		argv = append(argv, args...)
-//	}
-//	argv = append(argv, inputUri, outfile)
-//	process, err := os.StartProcess(config.Conf.DezoomifyPath, argv, procAttr)
-//	if err != nil {
-//		fmt.Println("start process error:", err)
-//		return false
-//	}
-//	_, err = process.Wait()
-//	if err != nil {
-//		fmt.Println("wait error:", err)
-//		return false
-//	}
-//	fmt.Println()
-//	return true
-//}
-//
-//func runOsWin(inputUri string, outfile string, args []string) bool {
-//	procAttr := &os.ProcAttr{
-//		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-//	}
-//	userArgs := strings.Split(config.Conf.DezoomifyRs, " ")
-//	argv := []string{"/c", config.Conf.DezoomifyPath}
-//	if userArgs != nil {
-//		argv = append(argv, userArgs...)
-//	}
-//	if args != nil {
-//		argv = append(argv, args...)
-//	}
-//	argv = append(argv, inputUri, outfile)
-//	process, err := os.StartProcess("C:\\Windows\\System32\\cmd.exe", argv, procAttr)
-//	if err != nil {
-//		fmt.Println("start process error:", err)
-//		return false
-//	}
-//	_, err = process.Wait()
-//	if err != nil {
-//		fmt.Println("wait error:", err)
-//		return false
-//	}
-//	fmt.Println()
-//	return true
-//}
+func StartProcess(inputUri string, outfile string, args []string) bool {
+	//	procAttr := &os.ProcAttr{
+	//		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+	//	}
+	//	userArgs := strings.Split(config.Conf.DezoomifyRs, " ")
+	//	argv := []string{"/c", config.Conf.DezoomifyPath}
+	//	if userArgs != nil {
+	//		argv = append(argv, userArgs...)
+	//	}
+	//	if args != nil {
+	//		argv = append(argv, args...)
+	//	}
+	//	argv = append(argv, inputUri, outfile)
+	//	process, err := os.StartProcess("C:\\Windows\\System32\\cmd.exe", argv, procAttr)
+	//	if err != nil {
+	//		fmt.Println("start process error:", err)
+	//		return false
+	//	}
+	//	_, err = process.Wait()
+	//	if err != nil {
+	//		fmt.Println("wait error:", err)
+	//		return false
+	//	}
+	//	fmt.Println()
+	return false
+}
 
 func OpenWebBrowser(args []string) bool {
 	running, err := IsBookgetGuiRunning()
