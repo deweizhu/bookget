@@ -3,6 +3,7 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/nlc"
+	"bookget/pkg/cookie"
 	"bookget/pkg/downloader"
 	"bookget/pkg/util"
 	"bytes"
@@ -33,8 +34,9 @@ type NlcGuji struct {
 	savePath  string
 	bookId    string
 
-	responseBody  []byte
-	cacheFilename string
+	responseBody []byte
+	urlsFile     string
+	bufBuilder   strings.Builder
 }
 
 func NewNlcGuji() *NlcGuji {
@@ -99,7 +101,7 @@ func (s *NlcGuji) Run() (msg string, err error) {
 		return "[err=getBookId]", err
 	}
 	s.savePath = CreateDirectory(s.parsedUrl.Host, s.bookId, "")
-	s.cacheFilename = s.savePath + ".cache"
+	s.urlsFile = s.savePath + "urls.txt"
 	//先生成书签目录
 	s.buildCatalog(s.savePath + "catalog.txt")
 
@@ -125,6 +127,13 @@ func (s *NlcGuji) Run() (msg string, err error) {
 		log.Printf(" %d/%d volume, %d pages \n", i, len(groupedVolumes), len(item.Items))
 		s.letsGo(item.Items)
 	}
+
+	err = os.WriteFile(s.urlsFile, []byte(s.bufBuilder.String()), os.ModePerm)
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("\n已生成图片URLs文件[%s]\n 可复制到 bookget-gui.exe 目录下，或使用其它软件下载。\n", s.urlsFile)
+
 	return "", nil
 }
 
@@ -160,6 +169,10 @@ func (s *NlcGuji) letsGo(canvases []nlc.DataItem) (msg string, err error) {
 		encoded := url.QueryEscape(resp.Data.FilePath)
 		imgUrl := imgServer + encoded
 		fmt.Printf("准备中 %d/%d\r", i, sizeVol)
+
+		s.bufBuilder.WriteString(imgUrl)
+		s.bufBuilder.WriteString("\n")
+
 		// 添加GET下载任务
 		s.dm.AddTask(
 			imgUrl,
@@ -235,6 +248,10 @@ func (s *NlcGuji) getBody(sUrl string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", config.Conf.UserAgent)
+	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	if cookies != "" {
+		req.Header.Set("Cookie", cookies)
+	}
 	resp, err := s.client.Do(req.WithContext(s.ctx))
 	if err != nil {
 		return nil, err
@@ -262,8 +279,16 @@ func (s *NlcGuji) postBody(sUrl string, postData []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", config.Conf.UserAgent)
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2")
+	req.Header.Set("token", "")
+	req.Header.Set("Origin", "https://"+s.parsedUrl.Host)
+	req.Header.Set("Referer", s.rawUrl)
 	req.Header.Set("Content-Type", "application/json")
-
+	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	if cookies != "" {
+		req.Header.Set("Cookie", cookies)
+	}
 	resp, err := s.client.Do(req.WithContext(s.ctx))
 	if err != nil {
 		return nil, err
@@ -287,7 +312,7 @@ func (s *NlcGuji) postBody(sUrl string, postData []byte) ([]byte, error) {
 
 func (s *NlcGuji) buildCatalog(outputPath string) {
 	// 1. 获取目录结构数据
-	fmt.Println("正在获取目录结构数据...")
+	//fmt.Println("正在获取目录结构数据...")
 
 	apiUrl := fmt.Sprintf("https://%s/api/anc/ancStructureAndCatalogList?metadataId=%s", s.parsedUrl.Host, s.bookId)
 	rawData := []byte("metadataId=" + s.bookId)
@@ -305,7 +330,7 @@ func (s *NlcGuji) buildCatalog(outputPath string) {
 	}
 
 	// 2. 获取页码映射数据
-	fmt.Println("正在获取页码映射数据...")
+	//fmt.Println("正在获取页码映射数据...")
 	apiUrl = fmt.Sprintf("https://%s/api/anc/ancImageIdListWithPageNum?metadataId=%s", s.parsedUrl.Host, s.bookId)
 	s.responseBody, err = s.postBody(apiUrl, rawData)
 	if err != nil {
@@ -405,7 +430,7 @@ func (s *NlcGuji) sortGroupsByStructureID(groups map[int][]nlc.DataItem) []nlc.D
 	return sortedItems
 }
 
-// 方案2：按 PageNum 升序排列（每组内部排序）​
+// 方案2：按 PageNum 升序排列（每组内部排序）
 func (s *NlcGuji) sortGroupsByPageNum(groups map[int][]nlc.DataItem) []nlc.DataItem {
 	var structureIDs []int
 	for id := range groups {
