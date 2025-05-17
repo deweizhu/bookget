@@ -1,0 +1,66 @@
+#controls-bar {
+    display: flex;
+    justify-content: space-between;
+    flex-direction: row;
+    height: 40px;
+    background-color: rgb(230, 230, 230);
+}
+
+.btn, .btn-disabled, .btn-cancel, .btn-active {
+    display: inline-block;
+    border: none;
+    margin: 5px 0;
+    border-radius: 5px;
+    outline: none;
+    height: 30px;
+    width: 30px;
+
+    background-size: 100%;
+}
+
+#btn-forward {
+    background-image: url('img/goForward.png');
+}
+
+.btn-disabled#btn-forward {
+    background-image: url('img/goForward_disabled.png');
+}
+
+#btn-back {
+    background-image: url('img/goBack.png');
+}
+
+.btn-disabled#btn-back {
+    background-image: url('img/goBack_disabled.png');
+}
+
+#btn-reload {
+    background-image: url('img/reload.png');
+}
+
+.btn-cancel#btn-reload {
+    background-image: url('img/cancel.png');
+}
+
+#btn-options {
+    background-image: url('img/options.png');
+}
+
+.controls-group {
+    display: inline-block;
+    height: 40px;
+}
+
+#nav-controls-container {
+    align-self: flex-start;
+    padding-left: 10px;
+}
+
+#manage-controls-container {
+    align-self: flex-end;
+    padding-right: 10px;
+}
+
+.btn:hover, .btn-cancel:hover, .btn-active {
+    background-color: rgb(200, 200, 200);
+}

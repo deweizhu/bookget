@@ -1,0 +1,30 @@
+<html>
+    <head>
+        <title>History</title>
+        <link rel="shortcut icon" href="img/history.png">
+        <link rel="stylesheet" type="text/css" href="styles.css">
+        <link rel="stylesheet" type="text/css" href="items.css">
+        <link rel="stylesheet" type="text/css" href="history.css">
+    </head>
+    <body>
+        <div id="overlay" class="hidden">
+            <div id="prompt-box">
+                <span class="prompt-text">Clear history?</span>
+                <div id="prompt-options">
+                    <div class="prompt-btn" id="prompt-false">Cancel</div>
+                    <div class="prompt-btn" id="prompt-true">Clear</div>
+                </div>
+            </div>
+        </div>
+        <h1 class="main-title">History</h1>
+        <div>
+            <span id="btn-clear" class="hidden">Clear history</span>
+        </div>
+        <div id="entries-container">
+            Loading...
+        </div>
+
+        <script src="../commands.js"></script>
+        <script src="history.js"></script>
+    </body>
+</html>

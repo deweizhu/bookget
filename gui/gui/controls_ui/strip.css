@@ -1,0 +1,72 @@
+#tabs-strip {
+    display: flex;
+    height: 28px;
+
+    border-top: 1px solid rgb(200, 200, 200);
+    border-bottom: 1px solid rgb(200, 200, 200);
+    background-color: rgb(230, 230, 230);
+}
+
+.tab, .tab-active {
+    display: flex;
+    flex: 1;
+    height: 100%;
+    border-right: 1px solid rgb(200, 200, 200);
+    overflow: hidden;
+    max-width: 250px;
+}
+
+.tab-active {
+    background-color: rgb(240, 240, 240);
+}
+
+#btn-new-tab {
+    display: flex;
+    height: 100%;
+    width: 30px;
+}
+
+#btn-new-tab:hover, .btn-tab-close:hover {
+    background-color: rgb(200, 200, 200);
+}
+
+#plus-label {
+    display: block;
+    flex: 1;
+    align-self: center;
+    line-height: 30px;
+    width: 30px;
+    text-align: center;
+}
+
+.btn-tab-close {
+    display: inline-block;
+    align-self: center;
+    min-width: 16px;
+    width: 16px;
+    height: 16px;
+    margin: 0 5px;
+    border-radius: 4px;
+
+    background-size: 100%;
+    background-image: url('img/cancel.png');
+}
+
+.tab-label {
+    display: flex;
+    flex: 1;
+    padding: 5px;
+    padding-left: 10px;
+    height: calc(100% - 10px);
+    vertical-align: middle;
+
+    white-space:nowrap;
+    overflow:hidden;
+}
+
+.tab-label span {
+    font-family: Arial;
+    font-size: 0.8em;
+    flex: 1;
+    align-self: center;
+}

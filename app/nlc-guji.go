@@ -360,7 +360,7 @@ func (s *NlcGuji) buildCatalog(outputPath string) {
 		idToPage[imageID] = pageNum
 	}
 
-	fmt.Printf("获取到 %d 条页码映射数据\n", len(idToPage))
+	//fmt.Printf("获取到 %d 条页码映射数据\n", len(idToPage))
 
 	// 生成目录
 	catalog := []string{config.CatalogVersionInfo}
@@ -378,7 +378,7 @@ func (s *NlcGuji) buildCatalog(outputPath string) {
 	}
 
 	fmt.Printf("目录已成功保存到 %s\n", outputPath)
-	fmt.Printf("共生成 %d 条目录项）\n", len(catalog)-1)
+	//fmt.Printf("共生成 %d 条目录项）\n", len(catalog)-1)
 }
 
 func processItem(item *nlc.CatalogItem, idToPage map[int]string, catalog *[]string, prefix string) {

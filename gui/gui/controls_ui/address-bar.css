@@ -1,0 +1,135 @@
+#address-bar-container {
+    display: flex;
+    height: calc(100% - 10px);
+    width: 80%;
+    max-width: calc(100% - 160px);
+
+    background-color: white;
+    border: 1px solid gray;
+    border-radius: 5px;
+
+    position: relative;
+    align-self: center;
+}
+
+#address-bar-container:focus-within {
+    outline: none;
+    box-shadow: 0 0 3px dodgerblue;
+}
+
+#address-bar-container:focus-within #btn-clear {
+    display: block;
+}
+
+#security-label {
+    display: inline-flex;
+    height: 100%;
+    margin-left: 2px;
+
+    vertical-align: top;
+}
+
+#security-label span {
+    font-family: Arial;
+    font-size: 0.9em;
+    color: gray;
+    vertical-align: middle;
+    flex: 1;
+    align-self: center;
+    text-align: left;
+    padding-left: 5px;
+    white-space: nowrap;
+}
+
+.icn {
+    display: inline-block;
+    margin: 2px 0;
+    border-radius: 5px;
+    top: 0;
+    width: 26px;
+    height: 26px;
+}
+
+#icn-lock {
+    background-size: 100%;
+}
+
+#security-label.label-unknown .icn {
+    background-image: url('img/unknown.png');
+}
+
+#security-label.label-insecure .icn {
+    background-image: url('img/insecure.png');
+}
+
+#security-label.label-insecure span {
+    color: rgb(192, 0, 0);
+}
+
+#security-label.label-neutral .icn {
+    background-image: url('img/neutral.png');
+}
+
+#security-label.label-secure .icn {
+    background-image: url('img/secure.png');
+}
+
+#security-label.label-secure span, #security-label.label-neutral span {
+    display: none;
+}
+
+#icn-favicon {
+    background-size: 100%;
+}
+
+#img-favicon {
+    width: 18px;
+    height: 18px;
+    padding: 4px;
+}
+
+#address-form {
+    margin: 0;
+}
+
+#address-field {
+    flex: 1;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    margin: 0;
+
+    line-height: 30px;
+    width: 100%;
+}
+
+#address-field:focus {
+    outline: none;
+}
+
+#btn-fav {
+    margin: 2px 5px;
+    background-size: 100%;
+    background-image: url('img/favorite.png');
+}
+
+#btn-fav:hover, #btn-clear:hover {
+    background-color: rgb(230, 230, 230);
+}
+
+#btn-fav.favorited {
+    background-image: url('img/favorited.png');
+}
+
+#btn-clear {
+    display: none;
+    width: 16px;
+    height: 16px;
+    border: none;
+    align-self: center;
+    background-color: transparent;
+    background-image: url(img/cancel.png);
+    background-size: 100%;
+    border: none;
+    border-radius: 8px;
+}

@@ -1,0 +1,54 @@
+.settings-entry {
+    display: block;
+    height: 48px;
+    width: 100%;
+    max-width: 500px;
+
+    background: none;
+    border: none;
+    padding: 4px 0;
+	font: inherit;
+	cursor: pointer;
+}
+
+#entry-script, #entry-popups {
+    display: none;
+}
+
+.entry {
+    display: block;
+    height: 100%;
+    text-align: left;
+    border-radius: 5px;
+}
+
+.entry:hover {
+    background-color: rgb(220, 220, 220);
+}
+
+.entry:focus {
+    outline: none;
+}
+
+.entry-name, .entry-value {
+    display: inline-flex;
+    height: 100%;
+    vertical-align: middle;
+}
+
+.entry-name span, .entry-value span {
+    flex: 1;
+    align-self: center;
+}
+
+.entry-name {
+    padding-left: 10px;
+}
+
+.entry-value {
+    float: right;
+    vertical-align: middle;
+    margin: 0 15px;
+    font-size: 0.8em;
+    color: gray;
+}

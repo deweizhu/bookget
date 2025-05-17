@@ -1,0 +1,38 @@
+html, body {
+    width: 200px;
+    height: 107px;
+}
+
+#dropdown-wrapper {
+    width: calc(100% - 2px);
+    height: calc(100% - 2px);
+    border: 1px solid gray;
+}
+
+.dropdown-item {
+    background-color: rgb(240, 240, 240);
+}
+
+.dropdown-item:hover {
+    background-color: rgb(220, 220, 220);
+}
+
+.item-label {
+    display: flex;
+    height: 35px;
+    text-align: center;
+    vertical-align: middle;
+
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.item-label span {
+    font-family: Arial;
+    font-size: 0.8em;
+    vertical-align: middle;
+    flex: 1;
+    align-self: center;
+    text-align: left;
+    padding-left: 10px;
+}

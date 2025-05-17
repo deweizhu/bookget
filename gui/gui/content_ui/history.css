@@ -1,0 +1,81 @@
+.header-date {
+    font-weight: 400;
+    font-size: 14px;
+    color: rgb(16, 16, 16);
+    line-height: 20px;
+    padding-top: 10px;
+    padding-bottom: 4px;
+    margin: 0;
+}
+
+#btn-clear {
+    font-size: 14px;
+    color: rgb(0, 97, 171);
+    cursor: pointer;
+    line-height: 20px;
+}
+
+#btn-clear.hidden {
+    display: none;
+}
+
+#overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+#overlay.hidden {
+    display: none;
+}
+
+#prompt-box {
+    display: flex;
+    box-sizing: border-box;
+    flex-direction: column;
+    position: fixed;
+    left: calc(50% - 130px);
+    top: calc(50% - 70px);
+    width: 260px;
+    height: 140px;
+    padding: 20px;
+    border-radius: 5px;
+    background-color: white;
+
+    box-shadow: rgba(0, 0, 0, 0.13) 0px 1.6px 20px, rgba(0, 0, 0, 0.11) 0px 0.3px 10px;
+}
+
+#prompt-options {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+
+    user-select: none;
+}
+
+.prompt-btn {
+    flex: 1;
+    flex-grow: 0;
+    align-self: flex-end;
+    cursor: pointer;
+    font-family: 'system-ui', sans-serif;
+    display: inline-block;
+    padding: 2px 7px;
+    font-size: 14px;
+    line-height: 20px;
+    border-radius: 3px;
+    font-weight: 400;
+}
+
+#prompt-true {
+    background-color: rgb(0, 112, 198);
+    color: white;
+}
+
+#prompt-false {
+    background-color: rgb(210, 210, 210);
+    margin-right: 5px;
+}

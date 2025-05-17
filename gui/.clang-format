@@ -1,0 +1,3 @@
+# Defines the coding style to apply. See:
+# <http://clang.llvm.org/docs/ClangFormatStyleOptions.html>
+DisableFormat: true

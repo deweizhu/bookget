@@ -1,0 +1,33 @@
+# bookget 配置文件config.yaml
+global_settings:
+  download_dir: "downloads"
+  max_downloads: 1000 # 最大下载次数（翻页）
+  sleep_time: 3       # 间隔睡眠几秒（翻页）
+
+sites:
+  - url: "http://read.nlc.cn/menhu/OutOpenBook/getReaderNew*"
+    script: ""
+    enabled: true
+    metadata:
+      description: "中国国家图书馆·中国国家数字图书馆"
+
+  - url: "http://szlib.clcn.net.cn/api/commonApi/jpgViewer*"
+    script: "scripts\\szlib.clcn.net.cn.js"
+    enabled: true
+    metadata:
+      description: "首都圖書館古籍數字平台"
+
+  - url: "https://rbook.ncl.edu.tw/NCLSearch/WaterMark/GetVideoImage*"
+    script: "scripts\\rbook.ncl.edu.tw.js"
+    enabled: true
+    metadata:
+      description: "古籍與特藏文獻資源 - （中國台灣省）國家圖書館"
+
+  - url: "https://guji.nlc.cn/api/common/jpgViewer*"
+    script: "scripts\\guji.nlc.cn.js"
+    enabled: true
+    metadata:
+      description: "中華古籍智慧服務平台"
+
+
+

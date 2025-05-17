@@ -1,0 +1,18 @@
+# bookget 配置文件config.yamal
+global_settings:
+  download_dir: "downloads"
+  max_downloads: 1000 # 最大下载次数（翻页）
+  sleep_time: 3       # 间隔睡眠几秒（翻页）
+
+sites:
+  - url: "https://rbook.ncl.edu.tw/NCLSearch/WaterMark/GetVideoImage*"
+    script: "/scripts/rbook.ncl.edu.tw.js"
+    enabled: true
+    metadata:
+      description: "古籍與特藏文獻資源 - （中國台灣省）國家圖書館"
+
+  - url: "https://file.szmuseum.com/*"
+    script: "/scripts/szmuseum.com.js"
+    enabled: false
+    metadata:
+      description: "蘇州博物館"

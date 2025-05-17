@@ -1,0 +1,55 @@
+*.vcxproj.user
+Release_x64/
+Release_x86/
+Debug_x64/
+Debug_x86/
+packages/
+dist/
+*.vscode
+.vscode/
+*.idea
+.idea/
+Release/
+Debug/
+ipch/
+x64/
+x86/
+.vs/
+downloads/
+*/downloads
+
+// Ignore the binary generated version of the resource (.rc) file
+*.aps
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app

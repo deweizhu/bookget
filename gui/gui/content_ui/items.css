@@ -1,0 +1,92 @@
+.item-container {
+    box-sizing: border-box;
+    padding: 4px 0;
+    height: 48px;
+}
+
+.item {
+    display: flex;
+    width: 100%;
+    max-width: 820px;
+    height: 40px;
+    width: 100%;
+    border-radius: 4px;
+    box-sizing: border-box;
+    box-shadow: rgba(0, 0, 0, 0.13) 0px 1.6px 3.6px, rgba(0, 0, 0, 0.11) 0px 0.3px 0.9px;
+    align-items: center;
+    background: rgb(255, 255, 255);
+}
+
+.item:hover {
+    box-shadow: 0px 4.8px 10.8px rgba(0,0,0,0.13), 0px 0.9px 2.7px rgba(0,0,0,0.11);
+}
+
+.favicon {
+    display: flex;
+    height: 40px;
+    width: 40px;
+    justify-content: center;
+    align-items: center;
+}
+
+.favicon img {
+    width: 16px;
+    height: 16px;
+}
+
+.label-title, .label-uri {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    height: 40px;
+    align-items: center;
+}
+
+.label-title a {
+    cursor: pointer;
+    display: inline-block;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 16px;
+    color: rgb(16, 16, 16);
+    border-width: initial;
+    border-style: none;
+    border-color: initial;
+    border-image: initial;
+    overflow: hidden;
+    background: none;
+    text-decoration: none;
+}
+
+.label-title a:hover {
+    text-decoration: underline;
+}
+
+.label-uri, .label-time {
+    margin: 0 6px;
+    line-height: 16px;
+    font-size: 12px;
+    color: rgb(115, 115, 115);
+}
+
+.label-uri p, .label-time p {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.btn-close {
+    height: 28px;
+    width: 28px;
+    margin: 6px;
+    border-radius: 2px;
+    background-image: url('img/close.png');
+    background-size: 100%;
+}
+
+.btn-close:hover {
+    background-color: rgb(243, 243, 243);
+}

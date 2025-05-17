@@ -1,0 +1,13 @@
+html, body {
+    margin: 0;
+    border: none;
+    padding: 0;
+}
+
+p {
+    margin: 0;
+}
+
+* {
+    user-select: none;
+}
