@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	Version              = "25.0512"
+	Version              = "25.0517"
 	CatalogVersionInfo   = "#版本=1.0" // 书签目录版本TXT
 	defaultUserAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0"
 	defaultFileExtension = ".jpg"
