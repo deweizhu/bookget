@@ -147,7 +147,7 @@ public:
     // 下载处理
     HRESULT HandleTabWebResourceResponseReceived(ICoreWebView2* sender, 
         ICoreWebView2WebResourceResponseReceivedEventArgs* args);
-    bool ShouldInterceptRequest(const std::wstring& sUrl, 
+    bool ShouldInterceptResponse(const std::wstring& sUrl, 
         ICoreWebView2WebResourceResponseView* response);
     bool DownloadFile(const std::wstring& sUrl, IStream *content);
     bool DownloadFile(const std::wstring& sUrl, ICoreWebView2HttpRequestHeaders *headers);

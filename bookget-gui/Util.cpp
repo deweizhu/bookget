@@ -713,3 +713,25 @@ void Util::DebugPrintException(const std::exception& e) {
         OutputDebugStringA("Failed to convert exception message\n");
     }
 }
+
+std::string  Util::removeDisableDevtoolJsCode(const std::string& input) {
+    // 正则表达式模式，匹配包含 ondevtoolopen 和 ondevtoolclose 的 var xxx = {...} 代码
+    std::regex pattern(R"(var\s+[a-zA-Z_$][\w$]*\s*=\s*\{[^}]*ondevtoolopen[^}]*ondevtoolclose[^}]*\})");
+    
+    // 使用空字符串替换匹配的部分
+    std::string result = std::regex_replace(input, pattern, "");
+    
+    return result;
+}
+
+std::string Util::ReadStreamToString(IStream* stream) {
+    STATSTG stat;
+    stream->Stat(&stat, STATFLAG_NONAME);
+    
+    std::string content(stat.cbSize.QuadPart, '\0');
+    ULONG read = 0;
+    stream->Seek({0}, STREAM_SEEK_SET, nullptr);
+    stream->Read(&content[0], static_cast<ULONG>(content.size()), &read);
+    
+    return content;
+}

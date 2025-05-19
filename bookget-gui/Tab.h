@@ -51,5 +51,9 @@ public:
 
     void SetupWebViewListeners();
 
+    HRESULT CreateModifiedResponse(const std::wstring &url,
+        ICoreWebView2WebResourceRequestedEventArgs* args,
+        ICoreWebView2WebResourceResponse** response);
+
 };
 

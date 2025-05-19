@@ -158,48 +158,67 @@ std::string HttpClient::build_post_request(const std::string& host,
 template <typename SocketType>
 std::string HttpClient::handle_string_response(SocketType& socket) {
     asio::streambuf response;
-    std::string result;
     
-    // Read HTTP headers
+    // 1. 读取HTTP头直到空行
     asio::read_until(socket, response, "\r\n\r\n");
 
-    // Check response status
+    // 2. 解析状态行
     std::istream response_stream(&response);
     std::string http_version;
     unsigned int status_code;
     std::string status_message;
+    
     response_stream >> http_version >> status_code;
     std::getline(response_stream, status_message);
 
+    // 3. 验证HTTP响应格式
     if (!response_stream || http_version.substr(0, 5) != "HTTP/") {
         throw std::runtime_error("Invalid HTTP response");
     }
 
+    // 4. 检查状态码
     if (status_code != 200) {
-        throw std::runtime_error("HTTP request failed with status code: " + std::to_string(status_code));
+        throw std::runtime_error("HTTP request failed with status: " + 
+                              std::to_string(status_code) + " " + status_message);
     }
 
-    // Skip remaining headers
+    // 5. 解析Content-Length（如果存在）
+    size_t content_length = 0;
     std::string header;
-    while (std::getline(response_stream, header) && header != "\r") {}
+    while (std::getline(response_stream, header) && header != "\r") {
+        if (header.find("Content-Length:") != std::string::npos) {
+            content_length = std::stoul(header.substr(16));
+        }
+    }
 
-    // Read response body
+    // 6. 预分配内存（如果知道长度）
+    std::string result;
+    if (content_length > 0) {
+        result.reserve(content_length);
+    }
+
+    // 7. 读取头部已缓冲的body数据
     if (response.size() > 0) {
-        std::ostringstream oss;
-        oss << &response;
-        result += oss.str();
+        result.append(
+            asio::buffers_begin(response.data()),
+            asio::buffers_end(response.data())
+        );
+        response.consume(response.size());
     }
 
-    // Read remaining data
-    asio::error_code error;
-    while (asio::read(socket, response, asio::transfer_at_least(1), error)) {
-        std::ostringstream oss;
-        oss << &response;
-        result += oss.str();
+    // 8. 高效读取剩余body数据
+    asio::error_code ec;
+    while (asio::read(socket, response, asio::transfer_at_least(1024), ec)) {
+        result.append(
+            asio::buffers_begin(response.data()),
+            asio::buffers_end(response.data())
+        );
+        response.consume(response.size());
     }
 
-    if (error != asio::error::eof) {
-        throw asio::system_error(error);
+    // 9. 检查错误（排除正常EOF）
+    if (ec != asio::error::eof) {
+        throw asio::system_error(ec);
     }
 
     return result;

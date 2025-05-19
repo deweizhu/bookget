@@ -20,7 +20,7 @@ public:
     struct SiteConfig {
         std::string url;
         std::string script;
-        bool enabled;
+        int intercept; 
         std::string ext;
         std::string description;
         int downloaderMode;
@@ -29,8 +29,10 @@ public:
     // 公共接口
     bool Load(const std::string& configPath);
     std::string GetDownloadDir();
+    std::string GetDefaultExt();
     int GetMaxDownloads();
     int GetSleepTime();
+    int GetDownloaderMode();
     const std::vector<SiteConfig>& GetSiteConfigs();
 
 private:
@@ -40,7 +42,8 @@ private:
         std::string downloadDir = "downloads";
         int maxDownloads = 1000;
         int sleepTime = 3;
-        int m_downloaderMode = 1; //下载模式 0=urls.txt | 1=自动监听图片 | 2 = 共享内存URL
+        int downloaderMode = 1;    //下载模式 0=urls.txt | 1=自动监听图片 | 2 = 共享内存URL
+        std::string fileExt = ".jpg";
      
         std::vector<SiteConfig> siteConfigs;
 

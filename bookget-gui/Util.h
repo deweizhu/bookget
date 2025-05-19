@@ -59,5 +59,8 @@ public:
 
     
     static void DebugPrintException(const std::exception& e);
+
+    static std::string removeDisableDevtoolJsCode(const std::string& input);
+    static std::string ReadStreamToString(IStream* stream);
 };
 

@@ -11,21 +11,6 @@
 using namespace Microsoft::WRL;
 
 
-//Tab::~Tab() {
-//    // 1. 移除导航监听器
-//    if (m_navigationToken.value != 0 && m_contentWebView) {
-//        m_contentWebView->remove_NavigationStarting(m_navigationToken);
-//    }
-//
-//    // 2. 移除资源请求监听器
-//    if (m_webResourceRequestedToken.value != 0 && m_webview9) {
-//        m_webview9->remove_WebResourceRequested(m_webResourceRequestedToken);
-//        m_webview9->RemoveWebResourceRequestedFilter(L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
-//    }
-//
-//    // 3. 释放 WebView2 对象（wil::com_ptr 会自动 Release）
-//}
-
 std::unique_ptr<Tab> Tab::CreateNewTab(HWND hWnd, ICoreWebView2Environment* env, size_t id, bool shouldBeActive)
 {
     std::unique_ptr<Tab> tab = std::make_unique<Tab>();
@@ -325,12 +310,18 @@ void Tab::SetupWebViewListeners()
                                     args->put_Response(nullptr); // 阻止加载
                                     wil::com_ptr<ICoreWebView2WebResourceResponse> emptyResponse;
                                     this->m_contentEnv->CreateWebResourceResponse(
-                                        nullptr,  // 无内容流
-                                        403,      // HTTP 403 Forbidden
-                                        L"Blocked", // 状态描述
-                                        L"",      // 无额外头信息
+                                        nullptr,  
+                                        403,      
+                                        L"Blocked", 
+                                        L"",      
                                         &emptyResponse);
                                     args->put_Response(emptyResponse.get());
+
+                                    ////或
+                                    // wil::com_ptr<ICoreWebView2WebResourceResponse> response;
+                                    //this->CreateModifiedResponse(url, args, &response);
+                                    //args->put_Response(response.get());
+
                                     return S_OK;
                                 }
 
@@ -377,16 +368,11 @@ void Tab::SetupWebViewListeners()
                         if (acceptHeader != nullptr) {
                             std::wstring accept(acceptHeader); // 转换为 std::wstring 方便处理
                             CoTaskMemFree(acceptHeader);       // 释放内存
-                            // 检查 Accept 类型
-                            if (accept.find(L"application/json") != std::wstring::npos) {
+                            // AJAX 请求跳过
+                            if (accept.find(L"application/json") != std::wstring::npos ) {
                                 return S_OK; 
                             }
-                            if (accept.find(L"image/") != std::wstring::npos ||
-                                     accept.find(L"application/octet-stream") != std::wstring::npos ||
-                                     accept.find(L"application/pdf") != std::wstring::npos
-                                ) {
-                                 return browserWindow->HandleTabWebResourceResponseReceived(sender, args);
-                            }
+                            return browserWindow->HandleTabWebResourceResponseReceived(sender, args);
                         }
                         return S_OK; 
                     }).Get(), 
@@ -395,3 +381,31 @@ void Tab::SetupWebViewListeners()
     }
     return;
 }
+
+HRESULT Tab::CreateModifiedResponse(const std::wstring &url, ICoreWebView2WebResourceRequestedEventArgs* args,
+        ICoreWebView2WebResourceResponse** response)
+{
+    asio::io_context io_context;
+    ssl::context ssl_ctx(ssl::context::tls_client);
+    ssl_ctx.set_verify_mode(SSL_VERIFY_NONE);
+    HttpClient httpClient(io_context, ssl_ctx);
+
+    std::string originalContent = httpClient.get(Util::WideToUtf8(url));
+    std::string modifiedContent = Util::removeDisableDevtoolJsCode(originalContent);
+
+
+    wil::com_ptr<IStream> newStream;
+    ::CreateStreamOnHGlobal(nullptr, TRUE, &newStream);
+    newStream->Write(modifiedContent.c_str(), static_cast<int>(modifiedContent.size()), nullptr);
+        
+    m_contentEnv->CreateWebResourceResponse(
+        newStream.get(),
+        200,
+        L"OK", 
+        L"Content-Type: text/javascript; charset=UTF-8",
+        response
+    );
+    return S_OK;
+}
+
+

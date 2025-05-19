@@ -18,7 +18,7 @@
 
 asio::io_context io_context;
 ssl::context ssl_ctx(ssl::context::tls_client);
-
+ssl_ctx.set_verify_mode(SSL_VERIFY_NONE);
 HttpClient httpClient(io_context, ssl_ctx);
 
 // Simple GET request

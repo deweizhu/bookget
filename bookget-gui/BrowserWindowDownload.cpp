@@ -14,64 +14,50 @@ HRESULT BrowserWindow::HandleTabWebResourceResponseReceived(ICoreWebView2* sende
     wil::unique_cotaskmem_string uri;
     RETURN_IF_FAILED(request->get_Uri(&uri));
 
-    if (!m_downloader.ShouldInterceptRequest(uri.get()))
-        return S_OK;
+   if (!m_downloader.ShouldInterceptResponse(uri.get()))
+       return S_OK;
 
-    std::wstring sUrl(uri.get());
-
-    // 获取响应
     wil::com_ptr<ICoreWebView2WebResourceResponseView> response;
     RETURN_IF_FAILED(args->get_Response(&response));
+   
+    std::wstring sUrl(uri.get());
+
     if (response) {
-         if (ShouldInterceptRequest(uri.get(), response.get())) {    
-               response->GetContent(
-                Callback<ICoreWebView2WebResourceResponseViewGetContentCompletedHandler>(
-                    [this, sUrl](HRESULT errorCode, IStream* content) -> HRESULT {
-                        if (SUCCEEDED(errorCode) && content)
-                        {
-                           this->DownloadFile(sUrl, content);
-                        }
-                        return S_OK;
-                    }).Get());
-         }
+        wil::com_ptr<ICoreWebView2HttpResponseHeaders> headers;
+        if (FAILED(response->get_Headers(&headers)) || !headers) {
+            return S_OK;
+        }
+
+        wil::unique_cotaskmem_string contentType;
+        wil::unique_cotaskmem_string contentLength;
+
+        SUCCEEDED(headers->GetHeader(L"Content-Type", &contentType));
+        SUCCEEDED(headers->GetHeader(L"Content-Length", &contentLength));
+
+        std::wstring contentTypeStr = contentType ? contentType.get() : L"";
+        std::wstring contentLengthStr = contentLength ? contentLength.get() : L"";
+
+        if (!m_downloader.ShouldInterceptContentType(contentTypeStr, contentLengthStr))
+            return S_OK;
+   
+        response->GetContent(
+            Callback<ICoreWebView2WebResourceResponseViewGetContentCompletedHandler>(
+                [this, sUrl](HRESULT errorCode, IStream* content) -> HRESULT {
+                    if (SUCCEEDED(errorCode) && content)
+                    {
+                        this->DownloadFile(sUrl, content);
+                    }
+                    return S_OK;
+                }).Get());
     }
 
     return S_OK;
 }
 
-// 请求拦截判断逻辑
-bool BrowserWindow::ShouldInterceptRequest(const std::wstring& sUrl,  ICoreWebView2WebResourceResponseView* response)
+
+
+bool BrowserWindow::DownloadFile(const std::wstring& sUrl, IStream *content)
 {
-    wil::com_ptr<ICoreWebView2HttpResponseHeaders> headers;
-    if (FAILED(response->get_Headers(&headers)) || !headers) {
-        return false;
-    }
-    
-
-    wil::unique_cotaskmem_string contentType;
-    wil::unique_cotaskmem_string contentLengthStr;
-    wil::unique_cotaskmem_string transferEncoding;
-
-
-    SUCCEEDED(headers->GetHeader(L"transfer-encoding",&transferEncoding));
-    SUCCEEDED(headers->GetHeader(L"Content-Type", &contentType));
-    SUCCEEDED(headers->GetHeader(L"Content-Length", &contentLengthStr));
-
-    if (transferEncoding && contentType) {
-        std::wstring s(transferEncoding.get());
-        return s.compare(L"chunked") == 0;
-    }
-
-    if (contentType && contentLengthStr) {
-        return m_downloader.ShouldInterceptResponse(contentType.get(), contentLengthStr.get());
-    }
-
-    return false;
-}
-
-
-bool BrowserWindow::DownloadFile(const std::wstring& sUrl, IStream *content) {
-
     std::wstring filePath = m_downloader.GetFilePath(sUrl);
     bool ret = Util::FileWrite(filePath, content);
 
@@ -89,7 +75,7 @@ bool BrowserWindow::DownloadFile(const std::wstring& sUrl, IStream *content) {
         std::wstring scriptPath;
         std::string narrow_url = Util::WideToUtf8(sUrl);
         for (const auto& site : Config::GetInstance().GetSiteConfigs()) {
-            if (site.enabled && Util::matchUrlPattern(site.url, narrow_url) ) {
+            if (site.intercept == 1 && Util::matchUrlPattern(site.url, narrow_url) ) {
                 scriptPath = GetFullPathFor(Util::Utf8ToWide(site.script).c_str());
                 break;
             }
@@ -107,8 +93,12 @@ bool BrowserWindow::DownloadFile(const std::wstring& sUrl, IStream *content) {
 
 bool BrowserWindow::DownloadFile(const std::wstring& sUrl,ICoreWebView2HttpRequestHeaders *headers)
 {
-    if (!m_downloader.ShouldInterceptRequest(sUrl))
-        return false;
+    int mode = m_downloader.GetDownloaderMode();
+    if (mode == 1) {
+         if (!m_downloader.ShouldInterceptRequest(sUrl))
+            return false;
 
-    return m_downloader.DownloadFile(sUrl.c_str(), headers);
+        return m_downloader.DownloadFile(sUrl.c_str(), headers);
+    }
+    return false;
 }

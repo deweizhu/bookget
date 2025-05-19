@@ -17,8 +17,8 @@ public:
     void DownloadNextImage(HWND hWnd);
 
     bool ShouldInterceptRequest(const std::wstring& sUrl);
-    bool ShouldInterceptResponse(const std::wstring& contentType, const std::wstring& contentLength);
-    bool ShouldInterceptResponse(const std::wstring& contentType);
+    bool ShouldInterceptResponse(const std::wstring& sUrl);
+    bool ShouldInterceptContentType(const std::wstring& contentType, const std::wstring& contentLength);
     std::wstring GetFilePath(const std::wstring& sUrl);
 
     void Reset(std::wstring sUrl, int runMode) {
@@ -39,7 +39,6 @@ private:
     std::wstring m_filePath;
 
     std::vector<std::wstring> m_targetUrls;
-    std::vector<std::wstring> m_siteUrls;
     std::atomic<int> m_downloadCounter = 0;
     std::mutex m_downloadCounterMutex;
     int m_downloaderMode = 1; // 0=urls.txt, 1=自动图片, 2=共享内存URL

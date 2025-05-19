@@ -3,35 +3,26 @@ global_settings:
   download_dir: "downloads"
   max_downloads: 1000 # 最大下载次数（翻页）
   sleep_time: 3       # 间隔睡眠几秒（翻页）
+  downloader_mode: 1  # 下载模式 0=从 urls.txt 加载图片URL | 1=自动监听 sites 图片URL | 2 = bookget 共享内存URL
+  ext: ".jpg"         # 保存的文件扩展名
 
 sites:
   - url: "http://read.nlc.cn/menhu/OutOpenBook/getReaderNew*"
-    script: ""
-    ext: ".pdf"
-    enabled: true
-    metadata:
-      description: "中国国家图书馆·中国国家数字图书馆"
+    ext: ".pdf"                               #保存的文件扩展名（不使用全局设置，单独为这个URL指定）
+    intercept: 0                              #拦截模式 0=发http请求之前，1=发http请求之后
+    description: "中国国家图书馆·中国国家数字图书馆"
 
   - url: "http://szlib.clcn.net.cn/api/commonApi/jpgViewer*"
-    script: "scripts\\szlib.clcn.net.cn.js"
-    ext: ".jpg"
-    enabled: true
-    metadata:
-      description: "首都圖書館古籍數字平台"
+    script: "scripts\\szlib.clcn.net.cn.js"   #页面加载完执行的JS代码
+    intercept: 1                              #拦截模式 0=发http请求之前，1=发http请求之后
+    description: "首都圖書館古籍數字平台"
 
   - url: "https://rbook.ncl.edu.tw/NCLSearch/WaterMark/GetVideoImage*"
-    script: "scripts\\rbook.ncl.edu.tw.js"
-    ext: ".jpg"
-    enabled: true
-    metadata:
-      description: "古籍與特藏文獻資源 - （中國台灣省）國家圖書館"
+    script: "scripts\\rbook.ncl.edu.tw.js"    #页面加载完执行的JS代码
+    intercept: 1                              #拦截模式 0=发http请求之前，1=发http请求之后
+    description: "古籍與特藏文獻資源 - （中國台灣省）國家圖書館"
 
   - url: "https://guji.nlc.cn/api/common/jpgViewer*"
-    script: "scripts\\guji.nlc.cn.js"
-    ext: ".jpg"
-    enabled: true
-    metadata:
-      description: "中華古籍智慧服務平台"
-
-
-
+    script: "scripts\\guji.nlc.cn.js"         #页面加载完执行的JS代码
+    intercept: 1                              #拦截模式 0=发http请求之前，1=发http请求之后
+    description: "中華古籍智慧服務平台"

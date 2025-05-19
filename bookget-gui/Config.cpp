@@ -15,6 +15,8 @@ bool Config::ConfigImpl::Load(const std::string& configPath) {
             if (global["download_dir"]) downloadDir = global["download_dir"].as<std::string>();
             if (global["max_downloads"]) maxDownloads = global["max_downloads"].as<int>();
             if (global["sleep_time"]) sleepTime = global["sleep_time"].as<int>();
+            if (global["downloader_mode"]) downloaderMode = global["downloader_mode"].as<int>();
+            if (global["ext"]) fileExt = global["ext"].as<std::string>();
         }
 
         // 解析站点配置
@@ -23,11 +25,15 @@ bool Config::ConfigImpl::Load(const std::string& configPath) {
                 SiteConfig siteConfig;
                 if (site["url"]) siteConfig.url = site["url"].as<std::string>();
                 if (site["script"]) siteConfig.script = site["script"].as<std::string>();
-                if (site["ext"]) siteConfig.ext = site["ext"].as<std::string>();
-                if (site["enabled"]) siteConfig.enabled = site["enabled"].as<bool>();
-                if (site["metadata"] && site["metadata"]["description"]) {
-                    siteConfig.description = site["metadata"]["description"].as<std::string>();
-                }
+
+                siteConfig.ext = site["ext"] ? site["ext"].as<std::string>() : fileExt;
+                
+                if (site["intercept"]) siteConfig.intercept = site["intercept"].as<int>();
+                if (site["description"]) siteConfig.description = site["description"].as<std::string>();
+
+                //if (site["metadata"] && site["metadata"]["description"]) {
+                    //siteConfig.description = site["metadata"]["description"].as<std::string>();
+                //}
                 siteConfigs.push_back(siteConfig);
             }
         }
@@ -47,12 +53,19 @@ std::string Config::GetDownloadDir() {
     return pImpl->downloadDir; 
 }
 
+std::string Config::GetDefaultExt() { 
+    return pImpl->fileExt; 
+}
+
 int Config::GetMaxDownloads() { 
     return pImpl->maxDownloads; 
 }
 
 int Config::GetSleepTime() { 
     return pImpl->sleepTime; 
+}
+int Config::GetDownloaderMode() { 
+    return pImpl->downloaderMode; 
 }
 
 const std::vector<Config::SiteConfig>& Config::GetSiteConfigs() {
