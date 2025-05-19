@@ -6,6 +6,7 @@
 #include "CheckFailure.h"
 #include "Util.h"
 #include "env.h"
+#include "HttpClient.h"
 
 using namespace Microsoft::WRL;
 

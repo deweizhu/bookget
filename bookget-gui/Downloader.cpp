@@ -2,7 +2,7 @@
 #include "Util.h"
 #include "Config.h"
 #include "SharedMemory.h"
-#include "HTTPDownloader.h"
+#include "HttpClient.h"
 #include "CheckFailure.h"
 
 void Downloader::Start(HWND hWnd) {
@@ -281,14 +281,13 @@ bool Downloader::DownloadFile(const wchar_t* url, ICoreWebView2HttpRequestHeader
         asio::io_context io_context;
         ssl::context ssl_ctx(ssl::context::tls_client);
         
-        // 跳过证书验证
         ssl_ctx.set_verify_mode(ssl::verify_none);
         
-        HTTPDownloader asio_downloader(io_context, ssl_ctx);
+        HttpClient httpClient(io_context, ssl_ctx);
         
         std::string sUrl_u8 = Util::WideToUtf8(url);
         std::string filePath_u8 = Util::WideToUtf8(filePath);
-        if (asio_downloader.download(sUrl_u8, filePath_u8, headersVec)) {
+        if (httpClient.download(sUrl_u8, filePath_u8, headersVec)) {
             OutputDebugString(L"Download completed successfully!");
             return true;
         } else {

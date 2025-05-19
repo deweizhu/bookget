@@ -51,7 +51,7 @@
     <ClInclude Include="Config.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HTTPDownloader.h">
+    <ClInclude Include="HttpClient.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -98,7 +98,7 @@
     <ClCompile Include="Config.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="HTTPDownloader.cpp">
+    <ClCompile Include="HttpClient.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
