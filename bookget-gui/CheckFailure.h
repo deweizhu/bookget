@@ -37,5 +37,4 @@ void FeatureNotAvailable();
 
 // Returns nothing, which is different from CHECK_FEATURE_RETURN
 #define CHECK_FEATURE_RETURN_EMPTY(feature) { if (!feature) { FeatureNotAvailable(); return; } }
-
 #endif // !CHECK_FAILURE_H

@@ -2,6 +2,8 @@
 #include "Util.h"
 #include "Config.h"
 #include "SharedMemory.h"
+#include "HTTPDownloader.h"
+#include "CheckFailure.h"
 
 void Downloader::Start(HWND hWnd) {
     m_downloaderThread = std::thread([this, hWnd]() {
@@ -45,7 +47,7 @@ void Downloader::Start(HWND hWnd) {
             if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 if (msg.message == WM_DOWNLOAD_URL) {
                     std::wstring* pUrl = reinterpret_cast<std::wstring*>(msg.lParam);
-                    DownloadFile(*pUrl, *pUrl);
+                    //DownloadFile(*pUrl, *pUrl);
                     delete pUrl;
                 }
             }
@@ -155,26 +157,40 @@ std::wstring Downloader::GetFilePath(const std::wstring& sUrl)
         std::lock_guard<std::mutex> lock(m_downloadCounterMutex);
         int currentCount = ++m_downloadCounter;
 
+        //默认扩展名
+        std::wstring ext = L".jpg";
+        auto& conf = Config::GetInstance();
+        bool useDefaultExt = false;
+        std::string narrow_url = Util::WideToUtf8(sUrl);
+        for (const auto& site : conf.GetSiteConfigs()) {
+            if (site.enabled && Util::matchUrlPattern(site.url, narrow_url) ) {
+               ext = Util::Utf8ToWide(site.ext);
+               useDefaultExt = true;
+               break;
+            }
+        }
+
         std::wstringstream filename;
         filename << m_downloadDir << L"\\"  
             << std::setw(4) << std::setfill(L'0') << currentCount;
-    
-        // 尝试从URL获取文件扩展名
-        size_t dotPos = sUrl.find_last_of(L'.');
-        if (dotPos != std::wstring::npos)
-        {
-            std::wstring ext = sUrl.substr(dotPos);
-            if (ext.length() <= 5) // 假设扩展名不超过5个字符
+
+        if(!useDefaultExt) {
+            // 尝试从URL获取文件扩展名
+            size_t dotPos = sUrl.find_last_of(L'.');
+            if (dotPos != std::wstring::npos)
             {
-                filename << ext;
-            }
-            else {
-                filename << L".jpg";
+                std::wstring ext_ = sUrl.substr(dotPos);
+                if (ext.length() <= 5) 
+                {
+                    filename << ext_;
+                }
+                else {
+                    filename << ext;
+                }
             }
         }
         else {
-            // 默认使用.jpg
-            filename << L".jpg";
+            filename << ext;
         }
         filePath.assign(filename.str());
     }
@@ -186,12 +202,6 @@ std::wstring Downloader::GetFilePath(const std::wstring& sUrl)
     }
     return filePath;
 }
-
-bool Downloader::DownloadFile(const std::wstring& sUrl, const std::wstring& filePath) {
-
-    return false;
-}
-
 
 
 // 2. 从文件加载URLs
@@ -248,3 +258,45 @@ void Downloader::DownloadNextImage(HWND hWnd)
     
 }
 
+
+
+bool Downloader::DownloadFile(const wchar_t* url, ICoreWebView2HttpRequestHeaders* headers)
+{
+    std::wstring filePath = GetFilePath(url);
+    std::vector<std::pair<std::string, std::string>> headersVec = {};
+
+    wil::com_ptr<ICoreWebView2HttpHeadersCollectionIterator> iterator;
+    if (SUCCEEDED(headers->GetIterator(&iterator))) {
+        BOOL hasCurrent = FALSE;
+        while (SUCCEEDED(iterator->get_HasCurrentHeader(&hasCurrent)) && hasCurrent) {
+            wil::unique_cotaskmem_string name, value;
+            if (SUCCEEDED(iterator->GetCurrentHeader(&name, &value))) {
+                headersVec.emplace_back(Util::WideToUtf8(name.get()), Util::WideToUtf8(value.get()));
+            }
+            iterator->MoveNext(&hasCurrent);
+        }
+    }
+
+    try {
+        asio::io_context io_context;
+        ssl::context ssl_ctx(ssl::context::tls_client);
+        
+        // 跳过证书验证
+        ssl_ctx.set_verify_mode(ssl::verify_none);
+        
+        HTTPDownloader asio_downloader(io_context, ssl_ctx);
+        
+        std::string sUrl_u8 = Util::WideToUtf8(url);
+        std::string filePath_u8 = Util::WideToUtf8(filePath);
+        if (asio_downloader.download(sUrl_u8, filePath_u8, headersVec)) {
+            OutputDebugString(L"Download completed successfully!");
+            return true;
+        } else {
+            OutputDebugString(L"Download failed");
+            return false;
+        }
+    } catch (std::exception& e) {
+            Util::DebugPrintException(e);
+        return false;
+    }
+}

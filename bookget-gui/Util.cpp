@@ -697,3 +697,19 @@ std::wstring Util::GetFullPathFor(HINSTANCE hInst, LPCWSTR relativePath) {
     return pathName;
 }
 
+void Util::DebugPrintException(const std::exception& e) {
+    try {
+        std::string u8_What = e.what();
+
+        int size_needed = MultiByteToWideChar(CP_UTF8, 0, u8_What.c_str(), (int)u8_What.size(), NULL, 0);
+        std::wstring wide(size_needed, 0);
+        MultiByteToWideChar(CP_UTF8, 0, u8_What.c_str(), (int)u8_What.size(), &wide[0], size_needed);
+        
+        // 添加异常类型和换行
+        std::wstring message = L"Exception: " + wide + L"\n";
+        OutputDebugStringW(message.c_str());
+    } catch (...) {
+        // 如果转换失败，回退到ANSI
+        OutputDebugStringA("Failed to convert exception message\n");
+    }
+}

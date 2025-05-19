@@ -56,5 +56,8 @@ public:
     static bool matchUrlPattern(const std::wstring& pattern, const std::wstring& url);
     static bool IsLocalUri(const std::wstring& url);
     static std::wstring GetFullPathFor(HINSTANCE hInst, LPCWSTR relativePath);
+
+    
+    static void DebugPrintException(const std::exception& e);
 };
 

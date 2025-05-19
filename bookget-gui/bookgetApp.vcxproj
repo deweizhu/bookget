@@ -205,6 +205,7 @@
     <ClInclude Include="Downloader.h" />
     <ClInclude Include="env.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="HTTPDownloader.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="SharedMemory.h" />
     <ClInclude Include="Tab.h" />
@@ -223,6 +224,7 @@
     <ClCompile Include="Config.cpp" />
     <ClCompile Include="Downloader.cpp" />
     <ClCompile Include="env.cpp" />
+    <ClCompile Include="HTTPDownloader.cpp" />
     <ClCompile Include="SharedMemory.cpp" />
     <ClCompile Include="Tab.cpp" />
     <ClCompile Include="Util.cpp" />

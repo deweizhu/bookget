@@ -1,7 +1,5 @@
 #pragma once
 #include "framework.h"
-
-#include <windows.h>
 #include <thread>
 #include <string>
 
@@ -13,7 +11,7 @@ public:
 
     void RequestDownload(const std::wstring& url);
 
-    bool DownloadFile(const std::wstring& sUrl, const std::wstring& filePath);
+    bool DownloadFile(const wchar_t* url, ICoreWebView2HttpRequestHeaders* headers);
 
     void LoadImageUrlsFromFile(const std::wstring& sUrlsFilePath);
     void DownloadNextImage(HWND hWnd);
@@ -63,6 +61,7 @@ private:
         L"application/pdf",
         L"application/octet-stream",
     };
+
 
 };
 

@@ -8,6 +8,13 @@
 
 #include <iomanip>
 #include <sstream>
+
+#include <Windows.h>
+#include <string>
+#include <exception>
+#include <codecvt>
+
+
 // Notify the user of a failure with a message box.
 void ShowFailure(HRESULT hr, const std::wstring& message)
 {
@@ -33,3 +40,6 @@ void FeatureNotAvailable()
         L"This feature is not available in the browser version currently being used.",
         L"Feature Not Available", MB_OK);
 }
+
+
+

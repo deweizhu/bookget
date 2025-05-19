@@ -71,9 +71,7 @@ public:
     HRESULT HandleTabMessageReceived(size_t tabId, ICoreWebView2* webview, ICoreWebView2WebMessageReceivedEventArgs* eventArgs);
     void HandleSharedMemoryUpdate(LPARAM lParam);
 
-    // 下载管理
-    bool DownloadFile(const std::wstring& sUrl, IStream *content);
- 
+
     // 工作线程
     void StartBackgroundThread();
     void StopBackgroundThread();
@@ -101,9 +99,11 @@ protected:
     int m_minWindowWidth = 0;
     int m_minWindowHeight = 0;
 
+public:
     // WebView资源
     wil::com_ptr<ICoreWebView2Environment> m_uiEnv;
     wil::com_ptr<ICoreWebView2Environment> m_contentEnv;
+protected:
     wil::com_ptr<ICoreWebView2Controller> m_controlsController;
     wil::com_ptr<ICoreWebView2Controller> m_optionsController;
     wil::com_ptr<ICoreWebView2> m_controlsWebView;
@@ -119,14 +119,6 @@ protected:
     EventRegistrationToken m_lostOptionsFocus;
     EventRegistrationToken m_newWindowRequestedToken;
     wil::com_ptr<ICoreWebView2WebMessageReceivedEventHandler> m_uiMessageBroker;
-
-    // 下载管理
-    Downloader m_downloader;
-    EventRegistrationToken m_webResourceResponseReceivedToken;
- 
-
-private:
-
 
 
 public:
@@ -148,12 +140,16 @@ public:
     HRESULT ClearContentCookies();
     HRESULT ClearControlsCookies();
 
+    
+    // 下载管理
+    Downloader m_downloader;
+
     // 下载处理
-    void SetupWebViewListeners(wil::com_ptr<ICoreWebView2>& contentWebView);
-    HRESULT HandleWebResourceResponseReceived(ICoreWebView2* sender, 
+    HRESULT HandleTabWebResourceResponseReceived(ICoreWebView2* sender, 
         ICoreWebView2WebResourceResponseReceivedEventArgs* args);
     bool ShouldInterceptRequest(const std::wstring& sUrl, 
         ICoreWebView2WebResourceResponseView* response);
-    bool DownloadFile(const std::wstring& sUrl, const std::wstring& filePath, IStream *content);
+    bool DownloadFile(const std::wstring& sUrl, IStream *content);
+    bool DownloadFile(const std::wstring& sUrl, ICoreWebView2HttpRequestHeaders *headers);
 
 };

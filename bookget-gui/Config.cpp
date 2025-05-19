@@ -23,6 +23,7 @@ bool Config::ConfigImpl::Load(const std::string& configPath) {
                 SiteConfig siteConfig;
                 if (site["url"]) siteConfig.url = site["url"].as<std::string>();
                 if (site["script"]) siteConfig.script = site["script"].as<std::string>();
+                if (site["ext"]) siteConfig.ext = site["ext"].as<std::string>();
                 if (site["enabled"]) siteConfig.enabled = site["enabled"].as<bool>();
                 if (site["metadata"] && site["metadata"]["description"]) {
                     siteConfig.description = site["metadata"]["description"].as<std::string>();

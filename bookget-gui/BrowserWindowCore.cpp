@@ -12,15 +12,6 @@ WCHAR BrowserWindow::s_title[MAX_LOADSTRING] = {0};
 BrowserWindow::~BrowserWindow() {
     StopBackgroundThread();
     SharedMemory::GetInstance().Cleanup();
-      // 移除AJAX请求监听
-    if (m_webResourceResponseReceivedToken.value != 0)
-    {
-        wil::com_ptr<ICoreWebView2_3> webview3;
-        if (SUCCEEDED(m_contentEnv->QueryInterface(IID_PPV_ARGS(&webview3))))
-        {
-            webview3->remove_WebResourceRequested(m_webResourceResponseReceivedToken);
-        }
-    }
 };
 
 //  窗口类注册实现

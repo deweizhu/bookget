@@ -1,67 +1,12 @@
 #include "BrowserWindow.h"
 #include "Config.h"
+#include <wininet.h>
+#pragma comment(lib, "wininet.lib")
 
 
-// 设置页面下载监听
-void BrowserWindow::SetupWebViewListeners(wil::com_ptr<ICoreWebView2> &contentWebView)
-{
-    if (contentWebView)
-    {
-        wil::com_ptr<ICoreWebView2_9> webview9;
-        if (SUCCEEDED(contentWebView->QueryInterface(IID_PPV_ARGS(&webview9))))
-        {
-            // 移除旧的下载监听器（如果存在）
-            if (m_webResourceResponseReceivedToken.value != 0)
-            {
-                webview9->remove_WebResourceResponseReceived(m_webResourceResponseReceivedToken);
-            }
-
-            webview9->add_WebResourceResponseReceived(
-                Callback<ICoreWebView2WebResourceResponseReceivedEventHandler>(
-                    [this](ICoreWebView2* sender, ICoreWebView2WebResourceResponseReceivedEventArgs* args) -> HRESULT {
-                         // 获取请求对象
-                        wil::com_ptr<ICoreWebView2WebResourceRequest> request;
-                        args->get_Request(&request);
-
-                        // 1. 检查请求方法是否为 OPTIONS（预检请求）
-                        LPWSTR method;
-                        request->get_Method(&method);
-                        if (wcscmp(method, L"OPTIONS") == 0) {
-                            return S_OK; 
-                        }
-
-                        // 2. 获取请求头集合
-                        wil::com_ptr<ICoreWebView2HttpRequestHeaders> headers;
-                        request->get_Headers(&headers);
-
-                        // 3. 检查 Accept 头
-                        LPWSTR acceptHeader = nullptr;
-                        headers->GetHeader(L"Accept", &acceptHeader);
-
-                        if (acceptHeader != nullptr) {
-                            std::wstring accept(acceptHeader); // 转换为 std::wstring 方便处理
-                            CoTaskMemFree(acceptHeader);       // 释放内存
-                            // 检查 Accept 类型
-                            if (accept.find(L"application/json") != std::wstring::npos) {
-                                return S_OK; 
-                            }
-                            if (accept.find(L"image/") != std::wstring::npos ||
-                                     accept.find(L"application/octet-stream") != std::wstring::npos ||
-                                     accept.find(L"application/pdf") != std::wstring::npos
-                                ) {
-                                 return HandleWebResourceResponseReceived(sender, args);
-                            }
-                        }
-                        return S_OK; 
-                    }).Get(), 
-                &m_webResourceResponseReceivedToken);
-        }
-    }
-    return;
-}
 
 // 资源响应处理
-HRESULT BrowserWindow::HandleWebResourceResponseReceived(ICoreWebView2* sender, ICoreWebView2WebResourceResponseReceivedEventArgs* args)
+HRESULT BrowserWindow::HandleTabWebResourceResponseReceived(ICoreWebView2* sender, ICoreWebView2WebResourceResponseReceivedEventArgs* args)
 {
     wil::com_ptr<ICoreWebView2WebResourceRequest> request;
     RETURN_IF_FAILED(args->get_Request(&request));
@@ -158,4 +103,12 @@ bool BrowserWindow::DownloadFile(const std::wstring& sUrl, IStream *content) {
         SharedMemory::GetInstance().WriteImagePath(filePath.c_str());
     }
     return ret;
+}
+
+bool BrowserWindow::DownloadFile(const std::wstring& sUrl,ICoreWebView2HttpRequestHeaders *headers)
+{
+    if (!m_downloader.ShouldInterceptRequest(sUrl))
+        return false;
+
+    return m_downloader.DownloadFile(sUrl.c_str(), headers);
 }

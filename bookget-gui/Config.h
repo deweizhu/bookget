@@ -21,6 +21,7 @@ public:
         std::string url;
         std::string script;
         bool enabled;
+        std::string ext;
         std::string description;
         int downloaderMode;
     };

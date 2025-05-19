@@ -10,11 +10,27 @@
 using namespace Microsoft::WRL;
 
 
+//Tab::~Tab() {
+//    // 1. 移除导航监听器
+//    if (m_navigationToken.value != 0 && m_contentWebView) {
+//        m_contentWebView->remove_NavigationStarting(m_navigationToken);
+//    }
+//
+//    // 2. 移除资源请求监听器
+//    if (m_webResourceRequestedToken.value != 0 && m_webview9) {
+//        m_webview9->remove_WebResourceRequested(m_webResourceRequestedToken);
+//        m_webview9->RemoveWebResourceRequestedFilter(L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+//    }
+//
+//    // 3. 释放 WebView2 对象（wil::com_ptr 会自动 Release）
+//}
+
 std::unique_ptr<Tab> Tab::CreateNewTab(HWND hWnd, ICoreWebView2Environment* env, size_t id, bool shouldBeActive)
 {
     std::unique_ptr<Tab> tab = std::make_unique<Tab>();
     tab->m_parentHWnd = hWnd;
     tab->m_tabId = id;
+    tab->m_contentEnv = env;
     tab->SetMessageBroker();
     tab->Init(env, shouldBeActive);
 
@@ -110,7 +126,7 @@ HRESULT Tab::Init(ICoreWebView2Environment* env, bool shouldBeActive)
             return S_OK;
         }).Get(), &m_newWindowRequestedToken));
          // 设置监听下载器
-         browserWindow->SetupWebViewListeners(m_contentWebView);
+         SetupWebViewListeners();
 
         return S_OK;
     }).Get());
@@ -271,3 +287,110 @@ std::wstring Tab::CookieToString(ICoreWebView2Cookie* cookie)
 }
 
 
+// 设置页面下载监听
+void Tab::SetupWebViewListeners()
+{
+    if (m_contentWebView)
+    {
+        if (SUCCEEDED(m_contentWebView->QueryInterface(IID_PPV_ARGS(&m_webview22))))
+        {
+            BrowserWindow* browserWindow = reinterpret_cast<BrowserWindow*>(GetWindowLongPtr(m_parentHWnd, GWLP_USERDATA));
+
+            // 移除旧的下载监听器（如果存在）
+            if (m_webResourceRequestedToken.value != 0) {
+                m_webview22->remove_WebResourceRequested(m_webResourceRequestedToken);
+                m_webview22->RemoveWebResourceRequestedFilterWithRequestSourceKinds(L"*",
+                    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL, COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL
+                );
+            }
+             // 添加过滤器
+            CHECK_FAILURE(m_webview22->AddWebResourceRequestedFilterWithRequestSourceKinds(
+                    L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL, COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL
+                )
+            );
+
+           // 注册请求监听器
+            m_webview22->add_WebResourceRequested(
+                Callback<ICoreWebView2WebResourceRequestedEventHandler>(
+                    [this, browserWindow](ICoreWebView2*, ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT {
+                        wil::com_ptr<ICoreWebView2WebResourceRequest> request;
+                        if (SUCCEEDED(args->get_Request(&request)))
+                        {
+                            wil::unique_cotaskmem_string uri;
+                            if (SUCCEEDED(request->get_Uri(&uri)) && uri)
+                            {
+                               std::wstring url(uri.get());
+                               if (url.find(L"disable-devtool.js") != std::wstring::npos) {
+                                    args->put_Response(nullptr); // 阻止加载
+                                    wil::com_ptr<ICoreWebView2WebResourceResponse> emptyResponse;
+                                    this->m_contentEnv->CreateWebResourceResponse(
+                                        nullptr,  // 无内容流
+                                        403,      // HTTP 403 Forbidden
+                                        L"Blocked", // 状态描述
+                                        L"",      // 无额外头信息
+                                        &emptyResponse);
+                                    args->put_Response(emptyResponse.get());
+                                    return S_OK;
+                                }
+
+                                // 获取所有请求头
+                                wil::com_ptr<ICoreWebView2HttpRequestHeaders> headers;
+                                request->get_Headers(&headers);
+                                if(!browserWindow->DownloadFile(uri.get(),headers.get())) {
+                                    return S_OK;  
+                                }
+                            }
+                        }
+                        return S_OK;
+                    }).Get(),
+                &m_webResourceRequestedToken);
+
+
+            if (m_webResourceResponseReceivedToken.value != 0)
+            {
+                m_webview22->remove_WebResourceResponseReceived(m_webResourceResponseReceivedToken);
+            }
+
+            m_webview22->add_WebResourceResponseReceived(
+                Callback<ICoreWebView2WebResourceResponseReceivedEventHandler>(
+                    [this, browserWindow](ICoreWebView2* sender, ICoreWebView2WebResourceResponseReceivedEventArgs* args) -> HRESULT {
+                         // 获取请求对象
+                        wil::com_ptr<ICoreWebView2WebResourceRequest> request;
+                        args->get_Request(&request);
+
+                        // 1. 检查请求方法是否为 OPTIONS（预检请求）
+                        LPWSTR method;
+                        request->get_Method(&method);
+                        if (wcscmp(method, L"OPTIONS") == 0) {
+                            return S_OK; 
+                        }
+
+                        // 2. 获取请求头集合
+                        wil::com_ptr<ICoreWebView2HttpRequestHeaders> headers;
+                        request->get_Headers(&headers);
+
+                        // 3. 检查 Accept 头
+                        LPWSTR acceptHeader = nullptr;
+                        headers->GetHeader(L"Accept", &acceptHeader);
+
+                        if (acceptHeader != nullptr) {
+                            std::wstring accept(acceptHeader); // 转换为 std::wstring 方便处理
+                            CoTaskMemFree(acceptHeader);       // 释放内存
+                            // 检查 Accept 类型
+                            if (accept.find(L"application/json") != std::wstring::npos) {
+                                return S_OK; 
+                            }
+                            if (accept.find(L"image/") != std::wstring::npos ||
+                                     accept.find(L"application/octet-stream") != std::wstring::npos ||
+                                     accept.find(L"application/pdf") != std::wstring::npos
+                                ) {
+                                 return browserWindow->HandleTabWebResourceResponseReceived(sender, args);
+                            }
+                        }
+                        return S_OK; 
+                    }).Get(), 
+                &m_webResourceResponseReceivedToken);
+        }
+    }
+    return;
+}

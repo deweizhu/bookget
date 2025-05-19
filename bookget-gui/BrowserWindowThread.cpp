@@ -70,8 +70,7 @@ void BrowserWindow::HandleSharedMemoryUpdate(LPARAM lParam) {
         sharedData->URLReady = false;
         m_downloader.Reset(sharedData->URL, 2);
         // 配置下载处理器
-        SetupWebViewListeners(m_tabs.at(m_activeTabId)->m_contentWebView);
-            
+        m_tabs.at(m_activeTabId)->SetupWebViewListeners();
         // 导航到URL
         m_tabs.at(m_activeTabId)->m_contentWebView->Navigate(sharedData->URL);
     } 

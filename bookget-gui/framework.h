@@ -6,6 +6,8 @@
 
 #include "targetver.h"
 #define WIN32_LEAN_AND_MEAN  // Exclude rarely-used stuff from Windows headers
+#define _WIN32_WINNT 0x0A00
+
 // Windows Header Files
 #include <atlstr.h>
 #include <strsafe.h>
