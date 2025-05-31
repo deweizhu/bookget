@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -66,7 +67,7 @@ func (r Tjlswx) download() (msg string, err error) {
 			continue
 		}
 		vid := fmt.Sprintf("%04d", i+1)
-		r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
+		r.dt.SavePath = CreateDirectory(vid)
 		canvases, err := r.getCanvases(vol, r.dt.Jar)
 		if err != nil || canvases == nil {
 			fmt.Println(err)
@@ -92,7 +93,7 @@ func (r Tjlswx) do(imgUrls []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}
@@ -111,7 +112,7 @@ func (r Tjlswx) do(imgUrls []string) (msg string, err error) {
 		_, err = gohttp.FastGet(ctx, uri, opts)
 		if err != nil {
 			fmt.Println(err)
-			util.PrintSleepTime(config.Conf.Speed)
+			util.PrintSleepTime(config.Conf.Sleep)
 		}
 		fmt.Println()
 	}

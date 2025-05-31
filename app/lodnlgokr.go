@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -91,7 +92,7 @@ func (r *LodNLGoKr) Run() (msg string, err error) {
 	if r.bookId == "" {
 		return "[err=getBookId]", err
 	}
-	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
+	r.savePath = config.Conf.Directory
 
 	webPageUrl := r.ServerUrl + "/nlmivs/viewWonmun_js.jsp?card_class=L&cno=" + r.bookId
 	if util.OpenWebBrowser([]string{"-i", webPageUrl}) {
@@ -108,7 +109,7 @@ func (r *LodNLGoKr) Run() (msg string, err error) {
 		return "[err=getBodyByGui]", err
 	}
 
-	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
+	r.savePath = config.Conf.Directory
 
 	//PDF
 	if strings.Contains(r.bufBody, "extention = \"PDF\";") {
@@ -136,7 +137,7 @@ func (r *LodNLGoKr) Run() (msg string, err error) {
 			continue
 		}
 		vid := fmt.Sprintf("%04d", i+1)
-		r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, vid)
+		r.savePath = CreateDirectory(vid)
 		r.canvases, err = r.getCanvasesByUrl(i, vol.Url)
 		if err != nil || r.canvases == nil {
 			fmt.Println(err)
@@ -163,7 +164,7 @@ func (r *LodNLGoKr) do(canvases []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		fileName := sortId + r.fileExt
-		if FileExist(r.savePath + fileName) {
+		if FileExist(path.Join(r.savePath, fileName)) {
 			continue
 		}
 		// 添加GET下载任务

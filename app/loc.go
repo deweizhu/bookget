@@ -17,6 +17,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -85,7 +86,7 @@ func (r *Loc) Run() (msg string, err error) {
 	if r.bookId == "" {
 		return "[err=getBookId]", err
 	}
-	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
+	r.savePath = config.Conf.Directory
 
 	apiUrl := fmt.Sprintf("https://www.loc.gov/item/%s/?fo=json", r.bookId)
 
@@ -118,9 +119,9 @@ func (r *Loc) Run() (msg string, err error) {
 	if err != nil || r.canvases == nil {
 		return "", err
 	}
-	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
+	r.savePath = config.Conf.Directory
 	if os.PathSeparator == '\\' {
-		r.urlsFile = r.savePath + "urls.txt"
+		r.urlsFile = path.Join(r.savePath, "urls.txt")
 		err = os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
 		if err != nil {
 			return "", err
@@ -150,8 +151,8 @@ func (r *Loc) do(canvases []string) (msg string, err error) {
 			continue
 		}
 		//跳过存在的文件
-		targetFilePath := r.savePath + fileName
-		if FileExist(r.savePath + fileName) {
+		targetFilePath := path.Join(r.savePath, fileName)
+		if FileExist(targetFilePath) {
 			bar.Add(1)
 			continue
 		}
@@ -181,7 +182,7 @@ func (r *Loc) letsGo(canvases []string) (msg string, err error) {
 			continue
 		}
 		//跳过存在的文件
-		if FileExist(r.savePath + fileName) {
+		if FileExist(path.Join(r.savePath, fileName)) {
 			continue
 		}
 		// 添加GET下载任务

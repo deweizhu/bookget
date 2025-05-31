@@ -62,13 +62,13 @@ func (d *Download) Size() uint64 {
 	return atomic.LoadUint64(&d.size)
 }
 
-// Speed returns download speed.
-func (d *Download) Speed() uint64 {
+// Sleep returns download Sleep.
+func (d *Download) Sleep() uint64 {
 	return (atomic.LoadUint64(&d.size) - atomic.LoadUint64(&d.lastSize)) / d.Interval * 1000
 }
 
-// AvgSpeed returns average download speed.
-func (d *Download) AvgSpeed() uint64 {
+// AvgSleep returns average download Sleep.
+func (d *Download) AvgSleep() uint64 {
 
 	if totalMills := d.TotalCost().Milliseconds(); totalMills > 0 {
 		return uint64(atomic.LoadUint64(&d.size) / uint64(totalMills) * 1000)
@@ -126,18 +126,18 @@ func dlProgressBar(wg *sync.WaitGroup, d *Download) {
 			return
 		}
 		pd := d.Size() * 100 / d.TotalSize()
-		speed := "="
+		Sleep := "="
 		max := int(pd)
 		for k := 0; k < max; k += 2 {
-			speed += "="
+			Sleep += "="
 		}
-		speed += ">"
-		after := 50 - len(speed)
+		Sleep += ">"
+		after := 50 - len(Sleep)
 		for k := 0; k < after; k++ {
-			speed += " "
+			Sleep += " "
 		}
-		fmt.Fprintf(os.Stdout, "\r%d%%[%s]  %s/%s  %s/s    in %s", pd, speed, ByteUnitString(int64(d.Size())),
-			ByteUnitString(int64(d.TotalSize())), ByteUnitString(int64(d.AvgSpeed())), d.TotalCost())
+		fmt.Fprintf(os.Stdout, "\r%d%%[%s]  %s/%s  %s/s    in %s", pd, Sleep, ByteUnitString(int64(d.Size())),
+			ByteUnitString(int64(d.TotalSize())), ByteUnitString(int64(d.AvgSleep())), d.TotalCost())
 
 		// Update last size
 		atomic.StoreUint64(&d.lastSize, atomic.LoadUint64(&d.size))

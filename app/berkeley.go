@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"path/filepath"
 	"regexp"
 	"time"
@@ -63,7 +64,7 @@ func (r *Berkeley) getBookId(sUrl string) (bookId string) {
 func (r *Berkeley) download() (msg string, err error) {
 	log.Printf("Get %s\n", r.dt.Url)
 
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	canvases, err := r.getCanvases(r.dt.Url, r.dt.Jar)
 	if err != nil || canvases == nil {
 		return "requested URL was not found.", err
@@ -87,7 +88,7 @@ func (r *Berkeley) do(canvases []string) (msg string, err error) {
 		sortId := fmt.Sprintf("%04d", i+1)
 		ext := filepath.Ext(dUrl)
 		filename := sortId + ext
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

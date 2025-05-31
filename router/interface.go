@@ -22,9 +22,9 @@ var (
 // FactoryRouter 创建路由器的工厂函数
 func FactoryRouter(siteID string, sUrl string) (map[string]interface{}, error) {
 	// 自动检测逻辑
-	if config.Conf.AutoDetect == 1 {
+	if config.Conf.DownloaderMode == 1 {
 		siteID = "bookget"
-	} else if config.Conf.AutoDetect == 2 || strings.Contains(sUrl, ".json") {
+	} else if config.Conf.DownloaderMode == 2 || strings.Contains(sUrl, ".json") {
 		siteID = "iiif.io"
 	}
 

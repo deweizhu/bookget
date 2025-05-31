@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"sync"
 )
@@ -72,10 +73,10 @@ func (p *Niiac) download() (msg string, err error) {
 			continue
 		}
 		if sizeVol == 1 {
-			p.dt.SavePath = CreateDirectory(p.dt.UrlParsed.Host, p.dt.BookId, "")
+			p.dt.SavePath = config.Conf.Directory
 		} else {
 			vid := fmt.Sprintf("%04d", i+1)
-			p.dt.SavePath = CreateDirectory(p.dt.UrlParsed.Host, p.dt.BookId, vid)
+			p.dt.SavePath = CreateDirectory(vid)
 		}
 
 		canvases, err := p.getCanvases(vol, p.dt.Jar)
@@ -189,7 +190,7 @@ func (p *Niiac) doDezoomify(iiifUrls []string) bool {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := p.dt.SavePath + filename
+		dest := path.Join(p.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}
@@ -215,7 +216,7 @@ func (p *Niiac) doNormal(imgUrls []string) bool {
 		ext := util.FileExt(uri)
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + ext
-		dest := p.dt.SavePath + filename
+		dest := path.Join(p.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"sync"
 )
@@ -72,7 +73,7 @@ func (r *NdlJP) download() (msg string, err error) {
 			continue
 		}
 		vid := fmt.Sprintf("%04d", i+1)
-		r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
+		r.dt.SavePath = CreateDirectory(vid)
 
 		log.Printf(" %d/%d volume, %d pages \n", i+1, len(respVolume), len(canvases))
 		r.do(canvases)
@@ -94,7 +95,7 @@ func (r *NdlJP) do(imgUrls []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

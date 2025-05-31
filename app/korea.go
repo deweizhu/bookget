@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"sync"
 )
@@ -69,10 +70,10 @@ func (r *Korea) download() (msg string, err error) {
 			continue
 		}
 		if sizeVol == 1 {
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+			r.dt.SavePath = config.Conf.Directory
 		} else {
 			vid := fmt.Sprintf("%04d", i+1)
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
+			r.dt.SavePath = CreateDirectory(vid)
 		}
 		if err != nil || vol.Canvases == nil {
 			continue
@@ -98,7 +99,7 @@ func (r *Korea) do(imgUrls []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}
@@ -119,7 +120,7 @@ func (r *Korea) do(imgUrls []string) (msg string, err error) {
 				},
 			}
 			gohttp.FastGet(ctx, imgUrl, opts)
-			util.PrintSleepTime(config.Conf.Speed)
+			util.PrintSleepTime(config.Conf.Sleep)
 			fmt.Println()
 		})
 	}

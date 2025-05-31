@@ -57,7 +57,7 @@ func (p *Utokyo) download() (msg string, err error) {
 		fmt.Println(err)
 		return "getVolumes", err
 	}
-	p.dt.SavePath = CreateDirectory(p.dt.UrlParsed.Host, p.dt.BookId, "")
+	p.dt.SavePath = config.Conf.Directory
 	for i, vol := range respVolume {
 		if !config.VolumeRange(i) {
 			continue
@@ -67,7 +67,7 @@ func (p *Utokyo) download() (msg string, err error) {
 		sortId := fmt.Sprintf("%04d", i+1)
 		dest := p.dt.SavePath + sortId + fName
 		p.do(dest, vol)
-		util.PrintSleepTime(config.Conf.Speed)
+		util.PrintSleepTime(config.Conf.Sleep)
 	}
 	return msg, err
 }

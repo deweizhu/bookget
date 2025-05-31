@@ -12,6 +12,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -104,11 +105,11 @@ func (r *DpmBj) download() (msg string, err error) {
 		return "cipherText not found", err
 	}
 
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 
 	dziJson, dziFormat := r.getDziJson(r.dt.UrlParsed.Host, cipherText)
 	filename := fmt.Sprintf("%s.json", r.dt.VolumeId)
-	dest := r.dt.SavePath + filename
+	dest := path.Join(r.dt.SavePath, filename)
 	os.WriteFile(dest, []byte(dziJson), os.ModePerm)
 	return r.do(dest, dziFormat)
 }

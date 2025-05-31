@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 )
 
@@ -59,14 +60,14 @@ func (r *Nationaljp) download() (msg string, err error) {
 		fmt.Println(err)
 		return "getVolumes", err
 	}
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	for i, vol := range respVolume {
 		if !config.VolumeRange(i) {
 			continue
 		}
 		vid := fmt.Sprintf("%04d", i+1)
 		fileName := vid + ".zip"
-		dest := r.dt.SavePath + fileName
+		dest := path.Join(r.dt.SavePath, fileName)
 		if FileExist(dest) {
 			continue
 		}

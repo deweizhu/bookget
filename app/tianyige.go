@@ -23,6 +23,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -67,7 +68,7 @@ func (r *Tianyige) Run(sUrl string) (msg string, err error) {
 		return "requested URL was not found.", err
 	}
 	r.dt.Jar, _ = cookiejar.New(nil)
-	r.localStorage.authorization, r.localStorage.authorizationu, err = r.getLocalStorage()
+	//r.localStorage.authorization, r.localStorage.authorizationu, err = r.getLocalStorage()
 	return r.download()
 }
 
@@ -107,7 +108,7 @@ func (r *Tianyige) download() (msg string, err error) {
 			continue
 		}
 		vid := fmt.Sprintf("%04d", i+1)
-		r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
+		r.dt.SavePath = CreateDirectory(vid)
 		sizePage := len(parts[vol.FascicleId])
 		log.Printf(" %d/%d volume, %d pages \n", i+1, sizeVol, sizePage)
 		text, err := r.getCatalogById(vol.CatalogId, vol.FascicleId, r.index)
@@ -117,10 +118,10 @@ func (r *Tianyige) download() (msg string, err error) {
 		r.do(parts[vol.FascicleId])
 	}
 
-	savePath := CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	savePath := config.Conf.Directory
 	data, _ := io.ReadAll(transform.NewReader(bytes.NewReader([]byte(bookmark)), simplifiedchinese.GBK.NewEncoder()))
-	_ = os.WriteFile(savePath+"bookmark.txt", []byte(bookmark), os.ModePerm)
-	_ = os.WriteFile(savePath+"bookmark_gbk.txt", data, os.ModePerm)
+	_ = os.WriteFile(path.Join(savePath, "catalog.txt"), []byte(bookmark), os.ModePerm)
+	_ = os.WriteFile(path.Join(savePath, "catalog-gbk.txt"), []byte(data), os.ModePerm)
 	return msg, err
 }
 
@@ -142,8 +143,8 @@ func (r *Tianyige) do(records []tianyige.ImageRecord) (msg string, err error) {
 		r.index++
 		sortId := fmt.Sprintf("%04d", i)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
-		if config.Conf.Bookmark || FileExist(dest) {
+		dest := path.Join(r.dt.SavePath, filename)
+		if FileExist(dest) {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i, size, uri)
@@ -178,7 +179,7 @@ func (r *Tianyige) do(records []tianyige.ImageRecord) (msg string, err error) {
 		} else {
 			idDict[kId] = uri
 		}
-		util.PrintSleepTime(config.Conf.Speed)
+		util.PrintSleepTime(config.Conf.Sleep)
 		fmt.Println()
 	}
 	wg.Wait()
@@ -363,44 +364,44 @@ func (r *Tianyige) getToken() string {
 // // 假设 LocalStorage 中已经有 'authorization' 和 'authorizationu' 这两个键
 // const authorization = localStorage.getItem('authorization');
 // const authorizationu = localStorage.getItem('authorizationu');
-func (r *Tianyige) getLocalStorage() (string, string, error) {
-	bs, err := os.ReadFile(config.Conf.LocalStorage)
-	if bs == nil || err != nil {
-		return "", "", err
-	}
-
-	// 分割输入字符串为多个部分，以换行符为分隔符
-	lines := strings.Split(string(bs), "\n")
-
-	authTokens := make(map[string]string)
-	for _, line := range lines {
-		// 去除行首和行尾的空格
-		line = strings.TrimSpace(line)
-
-		// 如果行是空的，则跳过
-		if line == "" {
-			continue
-		}
-
-		// 分割键和值，以冒号为分隔符，并去除键和值两侧的空格
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			return "", "", fmt.Errorf("invalid line format: %s", line)
-		}
-		key := strings.TrimSpace(parts[0])
-		value := strings.Trim(strings.Trim(strings.Trim(parts[1], "\""), " "), "'")
-
-		// 将键值对存储到 map 中
-		authTokens[key] = value
-	}
-
-	// 从 map 中提取 authorization 和 authorizationu 的值
-	authorization, ok1 := authTokens["authorization"]
-	authorizationu, ok2 := authTokens["authorizationu"]
-
-	// 检查是否成功提取到所有需要的值
-	if !ok1 || !ok2 {
-		return "", "", fmt.Errorf("missing required token")
-	}
-	return authorization, authorizationu, nil
-}
+//func (r *Tianyige) getLocalStorage() (string, string, error) {
+//	bs, err := os.ReadFile(config.Conf.LocalStorage)
+//	if bs == nil || err != nil {
+//		return "", "", err
+//	}
+//
+//	// 分割输入字符串为多个部分，以换行符为分隔符
+//	lines := strings.Split(string(bs), "\n")
+//
+//	authTokens := make(map[string]string)
+//	for _, line := range lines {
+//		// 去除行首和行尾的空格
+//		line = strings.TrimSpace(line)
+//
+//		// 如果行是空的，则跳过
+//		if line == "" {
+//			continue
+//		}
+//
+//		// 分割键和值，以冒号为分隔符，并去除键和值两侧的空格
+//		parts := strings.SplitN(line, ":", 2)
+//		if len(parts) != 2 {
+//			return "", "", fmt.Errorf("invalid line format: %s", line)
+//		}
+//		key := strings.TrimSpace(parts[0])
+//		value := strings.Trim(strings.Trim(strings.Trim(parts[1], "\""), " "), "'")
+//
+//		// 将键值对存储到 map 中
+//		authTokens[key] = value
+//	}
+//
+//	// 从 map 中提取 authorization 和 authorizationu 的值
+//	authorization, ok1 := authTokens["authorization"]
+//	authorizationu, ok2 := authTokens["authorizationu"]
+//
+//	// 检查是否成功提取到所有需要的值
+//	if !ok1 || !ok2 {
+//		return "", "", fmt.Errorf("missing required token")
+//	}
+//	return authorization, authorizationu, nil
+//}

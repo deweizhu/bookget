@@ -12,6 +12,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 )
 
@@ -72,7 +73,7 @@ func (r *Njuedu) download() (msg string, err error) {
 			continue
 		}
 		vid := fmt.Sprintf("%04d", i+1)
-		r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
+		r.dt.SavePath = CreateDirectory(vid)
 		canvases, err := r.getCanvases(vol, r.dt.Jar)
 		if err != nil || canvases == nil {
 			fmt.Println(err)
@@ -102,7 +103,7 @@ func (r *Njuedu) do(dziUrls []string) (msg string, err error) {
 		}
 		fileName := fmt.Sprintf("%04d", i+1) + config.Conf.FileExt
 		inputUri := r.dt.SavePath + val
-		outfile := r.dt.SavePath + fileName
+		outfile := path.Join(r.dt.SavePath, fileName)
 		if FileExist(outfile) {
 			continue
 		}
@@ -110,7 +111,7 @@ func (r *Njuedu) do(dziUrls []string) (msg string, err error) {
 		if err := iiifDownloader.Dezoomify(r.ctx, inputUri, outfile, args); err == nil {
 			os.Remove(inputUri)
 		}
-		util.PrintSleepTime(config.Conf.Speed)
+		util.PrintSleepTime(config.Conf.Sleep)
 	}
 	return "", err
 }

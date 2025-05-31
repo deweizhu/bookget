@@ -13,6 +13,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"sync"
 )
@@ -124,12 +125,10 @@ func FileExist(path string) bool {
 	return false
 }
 
-func CreateDirectory(domain, bookId, volumeId string) string {
-	bookIdEncode := getBookId(bookId)
-	domainNew := strings.ReplaceAll(domain, ":", "_")
-	dirPath := config.Conf.SaveFolder + string(os.PathSeparator) + domainNew + "_" + bookIdEncode + string(os.PathSeparator)
+func CreateDirectory(volumeId string) string {
+	dirPath := config.Conf.Directory
 	if volumeId != "" {
-		dirPath += "vol." + volumeId + string(os.PathSeparator)
+		dirPath = path.Join(config.Conf.Directory, "vol."+volumeId)
 	}
 	_ = os.MkdirAll(dirPath, os.ModePerm)
 	return dirPath
@@ -148,7 +147,7 @@ func WaitNewCookie() {
 			if FileExist(config.Conf.CookieFile) {
 				break
 			}
-			util.PrintSleepTime(config.Conf.Speed)
+			util.PrintSleepTime(config.Conf.Sleep)
 		}
 	}()
 	wg.Wait()
@@ -166,7 +165,7 @@ func WaitNewCookieWithMsg(uri string) {
 			if FileExist(config.Conf.CookieFile) {
 				break
 			}
-			util.PrintSleepTime(config.Conf.Speed)
+			util.PrintSleepTime(config.Conf.Sleep)
 		}
 	}()
 	wg.Wait()

@@ -14,6 +14,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -76,7 +77,7 @@ func (r *SiEdu) getBookId(sUrl string) (bookId string) {
 
 func (r *SiEdu) download() (msg string, err error) {
 	log.Printf("Get %s\n", r.dt.Url)
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	apiUrl := "https://" + r.dt.UrlParsed.Host + "/ids/manifest/" + r.dt.BookId
 	canvases, err := r.getCanvases(apiUrl, r.dt.Jar)
 	if err != nil || canvases == nil {
@@ -112,7 +113,7 @@ func (r *SiEdu) do(iiifUrls []string) (msg string, err error) {
 		body := strings.Replace(string(bs), `"http://iiif.io/api/image/2/level2.json",`, "", -1)
 		body = strings.Replace(body, `"sizeByH",`, "", -1)
 		os.WriteFile(inputUri, []byte(body), os.ModePerm)
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -66,10 +67,10 @@ func (r *Kyotou) download() (msg string, err error) {
 			continue
 		}
 		if sizeVol == 1 {
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+			r.dt.SavePath = config.Conf.Directory
 		} else {
 			vid := fmt.Sprintf("%04d", i+1)
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
+			r.dt.SavePath = CreateDirectory(vid)
 		}
 		canvases, err := r.getCanvases(vol, r.dt.Jar)
 		if err != nil || canvases == nil {
@@ -96,7 +97,7 @@ func (r *Kyotou) do(imgUrls []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

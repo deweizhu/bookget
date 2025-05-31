@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"sort"
 	"sync"
@@ -104,10 +105,10 @@ func (r *CafaEdu) download() (msg string, err error) {
 			continue
 		}
 		if sizeVol == 1 {
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+			r.dt.SavePath = config.Conf.Directory
 		} else {
 			vid := fmt.Sprintf("%04d", i+1)
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
+			r.dt.SavePath = CreateDirectory(vid)
 		}
 
 		canvases, err := r.getCanvases(vol, r.dt.Jar)
@@ -226,7 +227,7 @@ func (r *CafaEdu) doDezoomify(iiifUrls []string) bool {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}
@@ -251,7 +252,7 @@ func (r *CafaEdu) doNormal(imgUrls []string) bool {
 		ext := util.FileExt(uri)
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + ext
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

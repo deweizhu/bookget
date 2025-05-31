@@ -13,6 +13,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -64,7 +65,7 @@ func (r *Khirin) getBookId(sUrl string) (bookId string) {
 
 func (r *Khirin) download() (msg string, err error) {
 	log.Printf("Get %s  %s\n", r.dt.Url)
-	r.dt.SavePath = CreateDirectory(r.dt.Url, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	manifestUrl, err := r.getManifestUrl(r.dt.Url)
 	if err != nil {
 		return "requested URL was not found.", err
@@ -111,7 +112,7 @@ func (r *Khirin) doDezoomify(canvases []string) bool {
 		}
 		bsNew := regexp.MustCompile(`profile":\[([^{]+)\{"formats":([^\]]+)\],`).ReplaceAll(bs, []byte(`profile":[{"formats":["jpg"],`))
 		os.WriteFile(inputUri, bsNew, os.ModePerm)
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}
@@ -137,7 +138,7 @@ func (r *Khirin) doNormal(canvases []string) bool {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}
@@ -154,7 +155,7 @@ func (r *Khirin) doNormal(canvases []string) bool {
 		}
 		gohttp.FastGet(ctx, uri, opts)
 		fmt.Println()
-		//util.PrintSleepTime(config.Conf.Speed)
+		//util.PrintSleepTime(config.Conf.Sleep)
 	}
 	fmt.Println()
 	return true

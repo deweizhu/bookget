@@ -17,6 +17,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -103,7 +104,7 @@ func (r *Cuhk) Run() (msg string, err error) {
 	if r.bookId == "" {
 		return "[err=getBookId]", err
 	}
-	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
+	r.savePath = config.Conf.Directory
 
 	if util.OpenWebBrowser([]string{"-i", r.rawUrl}) {
 		fmt.Println("已启动 bookget-gui 浏览器，请注意完成「真人验证」。")
@@ -119,8 +120,8 @@ func (r *Cuhk) Run() (msg string, err error) {
 		return "", err
 	}
 
-	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
-	r.urlsFile = r.savePath + "urls.txt"
+	r.savePath = config.Conf.Directory
+	r.urlsFile = path.Join(r.savePath, "urls.txt")
 	err = os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
 	if err != nil {
 		return "", err
@@ -142,7 +143,7 @@ func (r *Cuhk) do(canvases []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		targetFilePath := r.savePath + filename
+		targetFilePath := path.Join(r.savePath, filename)
 		if FileExist(targetFilePath) {
 			bar.Add(1)
 			continue

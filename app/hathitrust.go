@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 )
@@ -60,7 +61,7 @@ func (r Hathitrust) download() (msg string, err error) {
 		fmt.Println(err.Error())
 		return "requested URL was not found.", err
 	}
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	msg, err = r.do(canvases)
 	return msg, err
 }
@@ -81,7 +82,7 @@ func (r Hathitrust) do(imgUrls []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -89,7 +90,7 @@ func (i *IIIF) download() (msg string, err error) {
 	if err != nil || canvases == nil {
 		return
 	}
-	i.dt.SavePath = CreateDirectory(i.dt.UrlParsed.Host, i.dt.BookId, "")
+	i.dt.SavePath = config.Conf.Directory
 	return i.do(canvases)
 }
 
@@ -210,7 +211,7 @@ func (i *IIIF) doDezoomify(iiifUrls []string) bool {
 		sortId := fmt.Sprintf("%04d", k+1)
 
 		filename := sortId + config.Conf.FileExt
-		dest := i.dt.SavePath + filename
+		dest := path.Join(i.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}
@@ -239,7 +240,7 @@ func (i *IIIF) doNormal(imgUrls []string) bool {
 		ext := util.FileExt(uri)
 		sortId := fmt.Sprintf("%04d", k+1)
 		filename := sortId + ext
-		dest := i.dt.SavePath + filename
+		dest := path.Join(i.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

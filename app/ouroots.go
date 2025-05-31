@@ -71,7 +71,7 @@ func (r *Ouroots) download() (msg string, err error) {
 		return "getVolumes", err
 	}
 	//不按卷下载，所有图片存一个目录
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	macCounter := 0
 	for i, vol := range respVolume.Volume {
 		if !config.VolumeRange(i) {

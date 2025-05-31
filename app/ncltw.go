@@ -2,7 +2,7 @@ package app
 
 import (
 	"bookget/config"
-	"bookget/pkg/cookie"
+	"bookget/pkg/chttp"
 	xhash "bookget/pkg/hash"
 	"bookget/pkg/sharedmemory"
 	"bookget/pkg/util"
@@ -18,6 +18,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
 )
@@ -82,8 +83,8 @@ func (r *NlcTw) Run() (err error) {
 	if r.bookId == "" {
 		return err
 	}
-	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
-	r.urlsFile = r.savePath + "urls.txt"
+	r.savePath = config.Conf.Directory
+	r.urlsFile = path.Join(r.savePath, "urls.txt")
 	//開始工作了
 	if os.PathSeparator != '\\' {
 		return errors.New("此网站只能在 Windows 操作系统下使用本软件。")
@@ -132,7 +133,7 @@ func (r *NlcTw) getBody(rawUrl string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", config.Conf.UserAgent)
-	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}
@@ -192,7 +193,7 @@ func (r *NlcTw) postBody(rawUrl string, postData interface{}) ([]byte, error) {
 	req.Header.Set("Origin", "https://"+r.parsedUrl.Host)
 	req.Header.Set("Referer", r.rawUrl)
 
-	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}

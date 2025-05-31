@@ -13,6 +13,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"sync"
@@ -67,7 +68,7 @@ func (r *RslRu) download() (msg string, err error) {
 		return "requested URL was not found.", err
 	}
 	vid := regexp.MustCompile(`([\\/:：；\s]+)`).ReplaceAllString(r.response.Description.Title, "")
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
+	r.dt.SavePath = CreateDirectory(vid)
 	canvases, err := r.getCanvases(r.dt.Url, r.dt.Jar)
 	if err != nil || canvases == nil {
 		return "requested URL was not found.", err
@@ -91,7 +92,7 @@ func (r *RslRu) do(canvases []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

@@ -58,7 +58,7 @@ func (r Gzlib) getBookId(sUrl string) (bookId string) {
 
 func (r Gzlib) download() (msg string, err error) {
 	log.Printf("Get %s\n", r.dt.Url)
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	canvases, err := r.getCanvases(r.dt.Url, r.dt.Jar)
 	if err != nil || canvases == nil {
 		fmt.Println(err)

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -66,10 +67,10 @@ func (p *Yonezawa) download() (msg string, err error) {
 			continue
 		}
 		if sizeVol == 1 {
-			p.dt.SavePath = CreateDirectory(p.dt.UrlParsed.Host, p.dt.BookId, "")
+			p.dt.SavePath = config.Conf.Directory
 		} else {
 			vid := fmt.Sprintf("%04d", i+1)
-			p.dt.SavePath = CreateDirectory(p.dt.UrlParsed.Host, p.dt.BookId, vid)
+			p.dt.SavePath = CreateDirectory(vid)
 		}
 
 		canvases, err := p.getCanvases(vol, p.dt.Jar)
@@ -98,7 +99,7 @@ func (p *Yonezawa) do(imgUrls []string) (msg string, err error) {
 		ext := util.FileExt(uri)
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + ext
-		dest := p.dt.SavePath + filename
+		dest := path.Join(p.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

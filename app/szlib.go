@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"sync"
@@ -70,10 +71,10 @@ func (r *SzLib) download() (msg string, err error) {
 		}
 		fmt.Printf("\r Test volume %d ... ", i+1)
 		if sizeVol == 1 {
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+			r.dt.SavePath = config.Conf.Directory
 		} else {
 			vid := fmt.Sprintf("%04d", i+1)
-			r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, vid)
+			r.dt.SavePath = CreateDirectory(vid)
 		}
 
 		canvases, err := r.getCanvases(vol)
@@ -103,7 +104,7 @@ func (r *SzLib) do(imgUrls []string) (msg string, err error) {
 		ext := util.FileExt(uri)
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + ext
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

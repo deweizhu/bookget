@@ -43,7 +43,6 @@ func main() {
 // initializeConfig 处理配置初始化
 func initializeConfig(ctx context.Context) bool {
 	if !config.Init(ctx) {
-		log.Println("配置初始化失败")
 		return false
 	}
 	return true
@@ -76,7 +75,7 @@ const (
 
 // determineRunMode 确定运行模式
 func determineRunMode() RunMode {
-	if config.Conf.AutoDetect == 1 {
+	if config.Conf.DownloaderMode == 1 {
 		return RunModeInteractiveImage
 	}
 	if config.Conf.DUrl != "" {
@@ -110,8 +109,8 @@ func executeBatchURLs() {
 	}
 
 	q := queue.NewConcurrentQueue(int(config.Conf.Threads))
-	if config.Conf.AutoDetect == 1 {
-		processURLsAutoDetect(q, allUrls)
+	if config.Conf.DownloaderMode == 1 {
+		processURLsDownloaderMode(q, allUrls)
 	} else {
 		processURLsManual(q, allUrls)
 	}
@@ -167,8 +166,8 @@ func isValidURL(url string) bool {
 	return url != "" && strings.HasPrefix(url, "http")
 }
 
-// processURLsAutoDetect 自动检测模式处理URLs
-func processURLsAutoDetect(q *queue.ConcurrentQueue, allUrls []string) {
+// processURLsDownloaderMode 自动检测模式处理URLs
+func processURLsDownloaderMode(q *queue.ConcurrentQueue, allUrls []string) {
 	for _, v := range allUrls {
 		wg.Add(1)
 		rawURL := v // 创建局部变量供闭包使用

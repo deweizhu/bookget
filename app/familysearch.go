@@ -3,7 +3,7 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/family"
-	"bookget/pkg/cookie"
+	"bookget/pkg/chttp"
 	"bookget/pkg/downloader"
 	"bookget/pkg/util"
 	"bytes"
@@ -18,6 +18,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -132,8 +133,8 @@ func (r *Familysearch) Run() (msg string, err error) {
 	if err != nil || r.canvases == nil {
 		return "", err
 	}
-	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
-	r.urlsFile = r.savePath + "urls.txt"
+	r.savePath = config.Conf.Directory
+	r.urlsFile = path.Join(r.savePath, "urls.txt")
 	err = os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
 	if err != nil {
 		return "", err
@@ -149,7 +150,7 @@ func (r *Familysearch) do(canvases []string) (err error) {
 		return errors.New("[err=do]")
 	}
 	referer := url.QueryEscape(r.rawUrl)
-	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
 
 	sid := r.getSessionId(cookies)
 	args := []string{
@@ -157,7 +158,7 @@ func (r *Familysearch) do(canvases []string) (err error) {
 		"-H", "Authorization:" + sid,
 		"-H", "referer:" + referer,
 		"-H", "User-Agent:" + config.Conf.UserAgent,
-		"-H", "cookie:" + cookies,
+		"-H", "chttp:" + cookies,
 	}
 	// 创建下载器实例
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
@@ -179,7 +180,7 @@ func (r *Familysearch) do(canvases []string) (err error) {
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, sizeVol, uri)
 		iiifDownloader.Dezoomify(r.ctx, uri, dest, args)
-		util.PrintSleepTime(config.Conf.Speed)
+		util.PrintSleepTime(config.Conf.Sleep)
 	}
 	return err
 }
@@ -196,7 +197,7 @@ func (r *Familysearch) getImageData(sUrl string) (imageData family.ImageData, er
 
 	bs, err := r.postBody(sUrl, data)
 	if err != nil {
-		fmt.Println("请求失败，cookie 可能已失效。")
+		fmt.Println("请求失败，chttp 可能已失效。")
 		return
 	}
 	var resultError family.ResultError
@@ -237,7 +238,7 @@ func (r *Familysearch) getCanvases(sUrl string, imageData family.ImageData) (can
 	data.Args.State.SelectedImageIndex = -1
 	data.Args.Locale = "zh"
 	data.Args.LoggedIn = true
-	data.Args.SessionId = r.getSessionId(cookie.CookiesFromFile(config.Conf.CookieFile))
+	data.Args.SessionId = r.getSessionId(chttp.CookiesFromFile(config.Conf.CookieFile))
 
 	bs, err := r.postBody(sUrl, data)
 	if err != nil {
@@ -292,7 +293,7 @@ func (r *Familysearch) getBody(sUrl string) ([]byte, error) {
 	req.Header.Set("origin", r.baseUrl)
 	req.Header.Set("referer", r.rawUrl)
 
-	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 		//sid := r.getSessionId(cookies)
@@ -356,7 +357,7 @@ func (r *Familysearch) postBody(sUrl string, postData interface{}) ([]byte, erro
 	req.Header.Set("referer", r.rawUrl)
 
 	// 添加cookie
-	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 		sid := r.getSessionId(cookies)

@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"sync"
 )
@@ -59,7 +60,7 @@ func (r *HannomNlv) getBookId(sUrl string) (bookId string) {
 
 func (r *HannomNlv) download() (msg string, err error) {
 	log.Printf("Get %s\n", r.dt.Url)
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	canvases, err := r.getCanvases(r.dt.Url, r.dt.Jar)
 	if err != nil || canvases == nil {
 		fmt.Println(err)
@@ -83,7 +84,7 @@ func (r *HannomNlv) do(imgUrls []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

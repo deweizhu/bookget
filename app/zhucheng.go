@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 	"sync"
@@ -59,17 +60,17 @@ func (r *ZhuCheng) download() (msg string, err error) {
 		fmt.Println(err)
 		return "getVolumes", err
 	}
-	r.dt.SavePath = CreateDirectory("zhucheng", r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	sizeVol := len(respVolume)
 	for i, vol := range respVolume {
 		if !config.VolumeRange(i) {
 			continue
 		}
 		if sizeVol == 1 {
-			r.dt.SavePath = CreateDirectory("zhucheng", r.dt.BookId, "")
+			r.dt.SavePath = config.Conf.Directory
 		} else {
 			vid := fmt.Sprintf("%04d", i+1)
-			r.dt.SavePath = CreateDirectory("zhucheng", r.dt.BookId, vid)
+			r.dt.SavePath = CreateDirectory(vid)
 		}
 
 		canvases, err := r.getCanvases(vol, r.dt.Jar)
@@ -98,7 +99,7 @@ func (r *ZhuCheng) do(imgUrls []string) (msg string, err error) {
 		ext := util.FileExt(uri)
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + ext
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

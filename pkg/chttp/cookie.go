@@ -1,4 +1,4 @@
-package cookie
+package chttp
 
 import (
 	"fmt"

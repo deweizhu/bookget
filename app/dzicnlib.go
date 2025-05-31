@@ -69,7 +69,7 @@ func (r DziCnLib) download() (msg string, err error) {
 	if r.ServerUrl == "" {
 		return "requested URL was not found.", err
 	}
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	r.Canvases, err = r.getCanvases(r.dt.Url, r.dt.Jar)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -113,7 +113,7 @@ func (r DziCnLib) dezoomify() (msg string, err error) {
 		if err != nil {
 			return "[err=iiifDownloader.Dezoomify]", err
 		}
-		util.PrintSleepTime(config.Conf.Speed)
+		util.PrintSleepTime(config.Conf.Sleep)
 	}
 	return "", err
 }

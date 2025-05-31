@@ -2,7 +2,7 @@ package app
 
 import (
 	"bookget/config"
-	"bookget/pkg/cookie"
+	"bookget/pkg/chttp"
 	"bookget/pkg/sharedmemory"
 	"bytes"
 	"context"
@@ -125,9 +125,15 @@ func (d *DownloaderImpl) getBody(rawUrl string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", config.Conf.UserAgent)
-	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
+	}
+	headers, err := chttp.ReadHeadersFromFile(config.Conf.HeaderFile)
+	if err == nil {
+		for key, value := range headers {
+			req.Header.Set(key, value)
+		}
 	}
 	resp, err := d.client.Do(req.WithContext(d.ctx))
 	if err != nil {
@@ -180,14 +186,19 @@ func (d *DownloaderImpl) postBody(rawUrl string, postData interface{}) ([]byte, 
 	} else {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2")
 	req.Header.Set("Origin", "https://"+d.parsedUrl.Host)
 	req.Header.Set("Referer", d.rawUrl)
 
-	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
+	}
+
+	headers, err := chttp.ReadHeadersFromFile(config.Conf.HeaderFile)
+	if err == nil {
+		for key, value := range headers {
+			req.Header.Set(key, value)
+		}
 	}
 	resp, err := d.client.Do(req.WithContext(d.ctx))
 	if err != nil {

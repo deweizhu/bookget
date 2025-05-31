@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 )
 
@@ -59,7 +60,7 @@ func (r *Tnm) getBookId(sUrl string) (bookId string) {
 func (r *Tnm) download() (msg string, err error) {
 	log.Printf("Get %s\n", r.dt.Url)
 
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	apiUrl := fmt.Sprintf("%s://%s/dlib/pages/%s", r.dt.UrlParsed.Scheme, r.dt.UrlParsed.Host, r.dt.BookId)
 	canvases, err := r.getCanvases(apiUrl, r.dt.Jar)
 	if err != nil {
@@ -88,7 +89,7 @@ func (r *Tnm) do(dziUrls []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + filename
+		dest := path.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

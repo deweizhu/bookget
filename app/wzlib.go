@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 )
 
@@ -54,7 +55,7 @@ func (p *Wzlib) getBookId(sUrl string) (bookId string) {
 
 func (p *Wzlib) download() (msg string, err error) {
 	log.Printf("Get %s\n", p.dt.Url)
-	p.dt.SavePath = CreateDirectory(p.dt.UrlParsed.Host, p.dt.BookId, "")
+	p.dt.SavePath = config.Conf.Directory
 
 	//旧版：瓯越记忆
 	if p.dt.UrlParsed.Host == "oyjy.wzlib.cn" {
@@ -90,7 +91,7 @@ func (p *Wzlib) do(dUrls []string) (msg string, err error) {
 		log.Printf("Get %d/%d, URL: %s\n", i+1, size, uri)
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + ".pdf"
-		dest := p.dt.SavePath + filename
+		dest := path.Join(p.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

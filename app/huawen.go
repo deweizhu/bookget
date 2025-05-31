@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -66,7 +67,7 @@ func (r *Huawen) download() (msg string, err error) {
 		if !config.VolumeRange(i) {
 			continue
 		}
-		r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+		r.dt.SavePath = config.Conf.Directory
 		log.Printf(" %d/%d PDFs \n", i+1, len(respVolume))
 		r.do(vol)
 	}
@@ -75,7 +76,7 @@ func (r *Huawen) download() (msg string, err error) {
 
 func (r *Huawen) do(pdfUrl string) (msg string, err error) {
 	filename := util.FileName(pdfUrl)
-	dest := r.dt.SavePath + filename
+	dest := path.Join(r.dt.SavePath, filename)
 	if FileExist(dest) {
 		return "", nil
 	}
@@ -96,7 +97,7 @@ func (r *Huawen) do(pdfUrl string) (msg string, err error) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	util.PrintSleepTime(config.Conf.Speed)
+	util.PrintSleepTime(config.Conf.Sleep)
 	fmt.Println()
 	return "", nil
 }

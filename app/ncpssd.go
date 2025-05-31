@@ -65,14 +65,14 @@ func (r *Ncpssd) download() (msg string, err error) {
 	if bookId == "" {
 		bookId = "ncpssd"
 	}
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, bookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	for i, vol := range respVolume {
 		if !config.VolumeRange(i) {
 			continue
 		}
 		log.Printf(" %d/%d volume, %s \n", i+1, len(respVolume), vol)
 		r.do(vol)
-		util.PrintSleepTime(config.Conf.Speed)
+		util.PrintSleepTime(config.Conf.Sleep)
 		fmt.Println()
 	}
 	return msg, err

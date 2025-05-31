@@ -3,7 +3,7 @@ package app
 import (
 	"bookget/config"
 	"bookget/model/iiif"
-	"bookget/pkg/cookie"
+	"bookget/pkg/chttp"
 	"bookget/pkg/downloader"
 	"bookget/pkg/progressbar"
 	"bookget/pkg/sharedmemory"
@@ -20,6 +20,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -108,8 +109,8 @@ func (r *Harvard) Run() (msg string, err error) {
 	if err != nil || r.canvases == nil {
 		return "", err
 	}
-	r.savePath = CreateDirectory(r.parsedUrl.Host, r.bookId, "")
-	r.urlsFile = r.savePath + "urls.txt"
+	r.savePath = config.Conf.Directory
+	r.urlsFile = path.Join(r.savePath, "urls.txt")
 	err = os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
 	if err != nil {
 		return "", err
@@ -186,17 +187,17 @@ func (r *Harvard) doDezoomify(canvases []string) (err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.savePath + filename
+		dest := path.Join(r.savePath, filename)
 		if FileExist(dest) {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, sizeVol, uri)
-		cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+		cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
 		args := []string{
 			"-H", "Origin:" + referer,
 			"-H", "Referer:" + referer,
 			"-H", "User-Agent:" + config.Conf.UserAgent,
-			"-H", "cookie:" + cookies,
+			"-H", "chttp:" + cookies,
 		}
 		iiifDownloader.Dezoomify(r.ctx, uri, dest, args)
 	}
@@ -217,7 +218,7 @@ func (r *Harvard) doNormal(canvases []string) (err error) {
 		ext := util.FileExt(imgUrl)
 		sortId := fmt.Sprintf("%04d", i+1)
 		fileName := sortId + ext
-		dest := r.savePath + fileName
+		dest := path.Join(r.savePath, fileName)
 		if FileExist(dest) {
 			continue
 		}
@@ -257,8 +258,8 @@ func (r *Harvard) doByGUI(canvases []string) (err error) {
 			continue
 		}
 		//跳过存在的文件
-		targetFilePath := r.savePath + fileName
-		if FileExist(r.savePath + fileName) {
+		targetFilePath := path.Join(r.savePath, fileName)
+		if FileExist(targetFilePath) {
 			bar.Add(1)
 			continue
 		}
@@ -319,7 +320,7 @@ func (r *Harvard) getBody(sUrl string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", config.Conf.UserAgent)
-	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}
@@ -376,7 +377,7 @@ func (r *Harvard) postBody(sUrl string, postData interface{}) ([]byte, error) {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	// 添加cookie
-	cookies := cookie.CookiesFromFile(config.Conf.CookieFile)
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}

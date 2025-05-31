@@ -61,7 +61,7 @@ func (r *Idp) download() (msg string, err error) {
 		return "requested URL was not found.", err
 	}
 	//不按卷下载，所有图片存一个目录
-	r.dt.SavePath = CreateDirectory(r.dt.UrlParsed.Host, r.dt.BookId, "")
+	r.dt.SavePath = config.Conf.Directory
 	sizeCanvases := len(canvases)
 	fmt.Println()
 	ext := ".jpg"

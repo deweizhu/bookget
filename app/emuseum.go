@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"sync"
@@ -75,10 +76,10 @@ func (d *Emuseum) download() (msg string, err error) {
 			continue
 		}
 		if sizeVol == 1 {
-			d.dt.SavePath = CreateDirectory(d.dt.UrlParsed.Host, d.dt.BookId, "")
+			d.dt.SavePath = config.Conf.Directory
 		} else {
 			vid := fmt.Sprintf("%04d", i+1)
-			d.dt.SavePath = CreateDirectory(d.dt.UrlParsed.Host, d.dt.BookId, vid)
+			d.dt.SavePath = CreateDirectory(vid)
 		}
 
 		canvases, err := d.getCanvases(vol, d.dt.Jar)
@@ -191,7 +192,7 @@ func (d *Emuseum) doDezoomify(iiifUrls []string) bool {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := d.dt.SavePath + filename
+		dest := path.Join(d.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}
@@ -216,7 +217,7 @@ func (d *Emuseum) doNormal(imgUrls []string) bool {
 		ext := util.FileExt(uri)
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + ext
-		dest := d.dt.SavePath + filename
+		dest := path.Join(d.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

@@ -72,7 +72,7 @@ func (r *War1931) mkdirAll(directory, vid string) (dirPath string) {
 		break
 	default:
 	}
-	r.dt.SavePath = config.Conf.SaveFolder + string(os.PathSeparator) + r.dt.VolumeId
+	r.dt.SavePath = config.Conf.Directory + string(os.PathSeparator) + r.dt.VolumeId
 	_ = os.MkdirAll(r.dt.SavePath, os.ModePerm)
 	return r.dt.SavePath
 }
