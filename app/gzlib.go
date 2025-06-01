@@ -2,146 +2,151 @@ package app
 
 import (
 	"bookget/config"
-	"bookget/pkg/gohttp"
-	"bookget/pkg/util"
+	"bookget/pkg/chttp"
+	"bookget/pkg/downloader"
 	"context"
+	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"regexp"
+	"time"
 )
 
 type Gzlib struct {
-	dt *DownloadTask
+	dm     *downloader.DownloadManager
+	ctx    context.Context
+	cancel context.CancelFunc
+	client *http.Client
+
+	rawUrl    string
+	parsedUrl *url.URL
+	savePath  string
+	bookId    string
 }
 
 func NewGzlib() *Gzlib {
+	ctx, cancel := context.WithCancel(context.Background())
+	dm := downloader.NewDownloadManager(ctx, cancel, config.Conf.MaxConcurrent)
+
+	// 创建自定义 Transport 忽略 SSL 验证
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	jar, _ := cookiejar.New(nil)
 	return &Gzlib{
 		// 初始化字段
-		dt: new(DownloadTask),
+		dm:     dm,
+		client: &http.Client{Timeout: config.Conf.Timeout * time.Second, Jar: jar, Transport: tr},
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
 func (r *Gzlib) GetRouterInit(sUrl string) (map[string]interface{}, error) {
-	msg, err := r.Run(sUrl)
+	r.rawUrl = sUrl
+	r.parsedUrl, _ = url.Parse(sUrl)
+	msg, err := r.Run()
 	return map[string]interface{}{
 		"url": sUrl,
 		"msg": msg,
 	}, err
 }
 
-func (r Gzlib) Run(sUrl string) (msg string, err error) {
-
-	r.dt.UrlParsed, err = url.Parse(sUrl)
-	r.dt.Url = sUrl
-
-	r.dt.BookId = r.getBookId(r.dt.Url)
-	if r.dt.BookId == "" {
-		return "requested URL was not found.", err
-	}
-	r.dt.Jar, _ = cookiejar.New(nil)
-	return r.download()
-}
-
-func (r Gzlib) getBookId(sUrl string) (bookId string) {
-	m := regexp.MustCompile(`(?i)bookid=([A-z0-9_-]+)`).FindStringSubmatch(sUrl)
-	if m != nil {
-		bookId = m[1]
-	}
-	m = regexp.MustCompile(`(?i)filename=([A-z0-9_-]+)`).FindStringSubmatch(sUrl)
+func (r *Gzlib) getBookId() (bookId string) {
+	m := regexp.MustCompile(`(?i)id=([A-z0-9_-]+)`).FindStringSubmatch(r.rawUrl)
 	if m != nil {
 		bookId = m[1]
 	}
 	return bookId
 }
 
-func (r Gzlib) download() (msg string, err error) {
-	log.Printf("Get %s\n", r.dt.Url)
-	r.dt.SavePath = config.Conf.Directory
-	canvases, err := r.getCanvases(r.dt.Url, r.dt.Jar)
-	if err != nil || canvases == nil {
-		fmt.Println(err)
+func (r *Gzlib) Run() (msg string, err error) {
+	r.bookId = r.getBookId()
+	if r.bookId == "" {
+		return "[err=getBookId]", err
 	}
-	return r.do(canvases)
-}
+	r.savePath = config.Conf.Directory
 
-func (r Gzlib) do(dUrls []string) (msg string, err error) {
-	if dUrls == nil {
-		return
-	}
-	fmt.Println()
-	size := len(dUrls)
-	ctx := context.Background()
-	requestCookie := r.dt.Jar.Cookies(r.dt.UrlParsed)
-	for i, uri := range dUrls {
-		if !config.PageRange(i, size) {
-			continue
-		}
-		if uri == "" {
-			continue
-		}
-		ext := util.FileExt(uri)
-		dest := r.dt.SavePath + r.dt.BookId + ext
-		opts := gohttp.Options{
-			DestFile:    dest,
-			Overwrite:   false,
-			Concurrency: 1,
-			CookieFile:  config.Conf.CookieFile,
-			CookieJar:   r.dt.Jar,
-			Headers: map[string]interface{}{
-				"User-Agent":     "ReaderEx 2.3",
-				"Accept-Range":   "bytes=0-",
-				"Range":          "bytes=0-",
-				"Request-Cookie": requestCookie,
-			},
-		}
-		_, err = gohttp.FastGet(ctx, uri, opts)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-	}
+	apiUrl := fmt.Sprintf("https://%s/attach/GZDD/Attach/%s.pdf", r.parsedUrl.Hostname(), r.bookId)
+	fileName := fmt.Sprintf("%s.pdf", r.bookId)
+
+	headers := r.buildRequestHeader()
+	r.dm.UseSizeBar = true
+	// 添加GET下载任务
+	r.dm.AddTask(
+		apiUrl,
+		"GET",
+		headers,
+		nil,
+		r.savePath,
+		fileName,
+		config.Conf.Threads,
+	)
+	r.dm.Start()
 
 	return "", err
 }
 
-func (r Gzlib) getVolumes(sUrl string, jar *cookiejar.Jar) (volumes []string, err error) {
-	//TODO implement me
-	panic("implement me")
+func (r *Gzlib) buildRequestHeader() map[string]string {
+	httpHeaders := map[string]string{"User-Agent": config.Conf.UserAgent}
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	if cookies != "" {
+		httpHeaders["Cookie"] = cookies
+	}
+
+	headers, err := chttp.ReadHeadersFromFile(config.Conf.HeaderFile)
+	if err == nil {
+		for key, value := range headers {
+			httpHeaders[key] = value
+		}
+	}
+	return httpHeaders
 }
 
-func (r Gzlib) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string, err error) {
-	apiUrl := fmt.Sprintf("%s://%s/Hrcanton/Search/ResultDetail?BookId=%s", r.dt.UrlParsed.Scheme,
-		r.dt.UrlParsed.Host, r.dt.BookId)
-	ctx := context.Background()
-	cli := gohttp.NewClient(ctx, gohttp.Options{
-		CookieFile: config.Conf.CookieFile,
-		CookieJar:  jar,
-		Headers: map[string]interface{}{
-			"User-Agent": config.Conf.UserAgent,
-		},
-	})
-	resp, err := cli.Get(apiUrl)
+func (r *Gzlib) getBody(sUrl string) ([]byte, error) {
+	req, err := http.NewRequest("GET", sUrl, nil)
 	if err != nil {
 		return nil, err
 	}
-	bs, _ := resp.GetBody()
-	text := string(bs)
-	pdfUrl := ""
-	//var fileUrl = "http://113.108.173.156" + subStr;
-	m := regexp.MustCompile(`fileUrl[\s]+=[\s]+["'](\S+)["']`).FindStringSubmatch(text)
-	if m != nil {
-		pdfUrl = m[1]
+	req.Header.Set("User-Agent", config.Conf.UserAgent)
+	req.Header.Set("Origin", "https://"+r.parsedUrl.Host)
+	req.Header.Set("Referer", r.rawUrl)
+
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	if cookies != "" {
+		req.Header.Set("Cookie", cookies)
 	}
-	//var subStr = "/OnlineViewServer/onlineview.aspx?filename=GZDD034601001.pdf"
-	m = regexp.MustCompile(`subStr[\s]+=[\s]+["'](\S+)["']`).FindStringSubmatch(text)
-	if m != nil {
-		pdfUrl += m[1]
+
+	headers, err := chttp.ReadHeadersFromFile(config.Conf.HeaderFile)
+	if err == nil {
+		for key, value := range headers {
+			req.Header.Set(key, value)
+		}
 	}
-	if pdfUrl == "" {
-		pdfUrl = fmt.Sprintf("http://113.108.173.156/OnlineViewServer/onlineview.aspx?filename=%s.pdf", r.dt.BookId)
+
+	resp, err := r.client.Do(req.WithContext(r.ctx))
+	if err != nil {
+		return nil, err
 	}
-	canvases = append(canvases, pdfUrl)
-	return canvases, nil
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("close body err=%v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		err = fmt.Errorf("服务器返回错误状态码: %d", resp.StatusCode)
+		return nil, err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }

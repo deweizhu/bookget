@@ -37,9 +37,6 @@ type DownloadTask struct {
 	supportsHEAD  bool // 是否支持HEAD请求
 	supportsRange bool // 是否支持Range请求
 	testedMethods bool // 是否已检测过支持的方法
-
-	totalSize  int64 // 总文件大小
-	downloaded int64 // 已下载字节数
 }
 
 type DownloadManager struct {
@@ -63,6 +60,7 @@ type DownloadManager struct {
 	bar        *progressbar.ProgressBar // 总进度条(基于任务数)
 	totalSize  int64                    // 总文件大小
 	downloaded int64                    // 已下载字节数
+	UseSizeBar bool                     //使用totalSize显示进度条
 }
 
 // NewDownloadManager 创建下载管理器
@@ -117,12 +115,10 @@ func (dm *DownloadManager) SetBar(maxTasks int) {
 func (dm *DownloadManager) Start() {
 	dm.mu.Lock()
 	dm.startTime = time.Now()
-
 	// 初始化进度条
 	if dm.bar == nil {
 		dm.bar = progressbar.Default(int64(len(dm.tasks)), "downloading")
 	}
-
 	if dm.showPrompt {
 		fmt.Printf("\n开始下载任务 (最大并发数: %d)...\n", dm.maxConcurrent)
 		fmt.Printf("总任务数: %d\n", len(dm.tasks))
@@ -151,7 +147,9 @@ func (dm *DownloadManager) Start() {
 			} else {
 				atomic.AddInt32(&dm.successCount, 1)
 				t.Success = true
-				dm.bar.Add(1) // 每个任务完成时进度条+1
+				if !dm.UseSizeBar {
+					_ = dm.bar.Add(1) // 每个任务完成时进度条+1
+				}
 			}
 			dm.mu.Unlock()
 		}(task)
@@ -212,6 +210,14 @@ func (task *DownloadTask) Download(ctx context.Context, dm *DownloadManager) err
 		if task.FileName == "" {
 			task.FileName = getFileNameFromURL(task.URL)
 		}
+	}
+	atomic.AddInt64(&dm.totalSize, task.ContentSize)
+
+	if dm.UseSizeBar {
+		dm.mu.Lock()
+		defer dm.mu.Unlock()
+		// 更新进度条
+		dm.bar = progressbar.Default(dm.totalSize, "downloading")
 	}
 
 	// 2. 自动获取文件名
@@ -327,6 +333,9 @@ func (task *DownloadTask) multiThreadDownload(ctx context.Context, dm *DownloadM
 						task.mu.Unlock()
 
 						atomic.AddInt64(&dm.downloaded, int64(n))
+						if dm.UseSizeBar {
+							_ = dm.bar.Add(n)
+						}
 					}
 
 					if readErr != nil {
@@ -383,6 +392,9 @@ func (task *DownloadTask) singleThreadDownload(ctx context.Context, dm *Download
 				task.mu.Unlock()
 
 				atomic.AddInt64(&dm.downloaded, int64(n))
+				if dm.UseSizeBar {
+					_ = dm.bar.Add(n)
+				}
 			}
 
 			if readErr != nil {

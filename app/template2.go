@@ -220,3 +220,19 @@ func (d *DownloaderImpl) postBody(rawUrl string, postData interface{}) ([]byte, 
 	}
 	return body, nil
 }
+
+func (d *DownloaderImpl) buildRequestHeader() map[string]string {
+	httpHeaders := map[string]string{"User-Agent": config.Conf.UserAgent}
+	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	if cookies != "" {
+		httpHeaders["Cookie"] = cookies
+	}
+
+	headers, err := chttp.ReadHeadersFromFile(config.Conf.HeaderFile)
+	if err == nil {
+		for key, value := range headers {
+			httpHeaders[key] = value
+		}
+	}
+	return httpHeaders
+}

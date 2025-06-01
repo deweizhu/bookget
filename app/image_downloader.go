@@ -250,9 +250,9 @@ func (i *ImageDownloader) downloadAll(urlTemplate string, startVol, endVol, tota
 			volStr := fmt.Sprintf("%04d", volume)
 			var dirPath string
 			if i.hasVolPlaceholder {
-				dirPath = filepath.Join(config.Conf.Directory, "downloads", volStr)
+				dirPath = filepath.Join(config.Conf.Directory, volStr)
 			} else {
-				dirPath = filepath.Join(config.Conf.Directory, "downloads")
+				dirPath = config.Conf.Directory
 			}
 
 			if err := os.MkdirAll(dirPath, 0755); err != nil {
