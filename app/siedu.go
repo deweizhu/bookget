@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -92,10 +93,10 @@ func (r *SiEdu) do(iiifUrls []string) (msg string, err error) {
 		return
 	}
 	referer := url.QueryEscape(r.dt.Url)
-	args := []string{"--dezoomer=iiif",
+
+	args := []string{
 		"-H", "Origin:" + referer,
 		"-H", "Referer:" + referer,
-		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(iiifUrls)
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
@@ -105,7 +106,7 @@ func (r *SiEdu) do(iiifUrls []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		inputUri := r.dt.SavePath + sortId + "_info.json"
+		inputUri := filepath.Join(r.dt.SavePath, sortId+"_info.json")
 		bs, err := r.getBody(uri, r.dt.Jar)
 		if err != nil {
 			continue

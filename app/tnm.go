@@ -76,10 +76,10 @@ func (r *Tnm) do(dziUrls []string) (msg string, err error) {
 		return "", err
 	}
 	referer := url.QueryEscape(r.dt.Url)
+
 	args := []string{
 		"-H", "Origin:" + referer,
 		"-H", "Referer:" + referer,
-		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(dziUrls)
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)

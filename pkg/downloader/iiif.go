@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"bookget/config"
+	"bookget/pkg/chttp"
 	"bookget/pkg/progressbar"
 	"bytes"
 	"context"
@@ -128,6 +129,9 @@ type IIIFDownloader struct {
 	maxRetries    int
 	jpgQuality    int
 	maxConcurrent int
+
+	cookies []http.Cookie
+	headers http.Header
 }
 
 func NewIIIFDownloader(c *config.Input) *IIIFDownloader {
@@ -139,12 +143,17 @@ func NewIIIFDownloader(c *config.Input) *IIIFDownloader {
 	}
 	jar, _ := cookiejar.New(nil)
 
+	cookies, _ := chttp.ReadHttpCookiesFromFile(config.Conf.CookieFile)
+	headers, _ := chttp.ReadHttpHeadersFromFile(config.Conf.HeaderFile)
+
 	dl := &IIIFDownloader{
 		client:        &http.Client{Jar: jar, Transport: tr},
 		userAgent:     c.UserAgent,
 		maxRetries:    c.Retries,
 		jpgQuality:    c.Quality,
 		maxConcurrent: c.MaxConcurrent,
+		cookies:       cookies,
+		headers:       headers,
 	}
 	// 设置 v2 模板（支持简写尺寸和旧版字段名）
 	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{.Width}},/0/default.{{.Format}}")
@@ -643,8 +652,23 @@ func (d *IIIFDownloader) getIIIFInfo(ctx context.Context, url string, headers ht
 		}
 	}
 
-	if req.Header.Get("User-Agent") == "" {
+	// 设置 User-Agent（明确优先级）
+	if d.userAgent != "" {
 		req.Header.Set("User-Agent", d.userAgent)
+	}
+
+	// 添加 Cookie
+	if d.cookies != nil {
+		for _, cookie := range d.cookies {
+			req.AddCookie(&cookie)
+		}
+	}
+
+	// 处理额外头（d.headers）
+	if d.headers != nil {
+		for key, values := range d.headers {
+			req.Header.Set(key, values[0])
+		}
 	}
 
 	resp, err := d.client.Do(req.WithContext(ctx))
@@ -685,10 +709,24 @@ func (d *IIIFDownloader) getIIIFXMLInfo(ctx context.Context, url string, headers
 		}
 	}
 
-	if req.Header.Get("User-Agent") == "" {
+	// 设置 User-Agent（明确优先级）
+	if d.userAgent != "" {
 		req.Header.Set("User-Agent", d.userAgent)
 	}
 
+	// 添加 Cookie
+	if d.cookies != nil {
+		for _, cookie := range d.cookies {
+			req.AddCookie(&cookie)
+		}
+	}
+
+	// 处理额外头（d.headers）
+	if d.headers != nil {
+		for key, values := range d.headers {
+			req.Header.Set(key, values[0])
+		}
+	}
 	resp, err := d.client.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, err
@@ -724,10 +762,29 @@ func (d *IIIFDownloader) downloadImage(ctx context.Context, url string, headers 
 		return nil, err
 	}
 
-	req.Header = headers.Clone()
+	for key, values := range headers {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
 
-	if req.Header.Get("User-Agent") == "" {
+	// 设置 User-Agent（明确优先级）
+	if d.userAgent != "" {
 		req.Header.Set("User-Agent", d.userAgent)
+	}
+
+	// 添加 Cookie
+	if d.cookies != nil {
+		for _, cookie := range d.cookies {
+			req.AddCookie(&cookie)
+		}
+	}
+
+	// 处理额外头（d.headers）
+	if d.headers != nil {
+		for key, values := range d.headers {
+			req.Header.Set(key, values[0])
+		}
 	}
 
 	resp, err := d.client.Do(req.WithContext(ctx))

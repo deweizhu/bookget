@@ -15,6 +15,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -98,7 +99,7 @@ func (r *Ouroots) do(pageTotal int, volumeId int) (msg string, err error) {
 	}
 	for i := 1; i <= pageTotal; i++ {
 		sortId := fmt.Sprintf("%s.jpg", fmt.Sprintf("%04d", r.Counter+1))
-		dest := r.dt.SavePath + sortId
+		dest := filepath.Join(r.dt.SavePath, sortId)
 		if util.FileExist(dest) {
 			r.Counter++
 			r.bar.Add(1)

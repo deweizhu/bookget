@@ -13,6 +13,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 )
 
@@ -110,10 +111,10 @@ func (r *War1931) do(canvases []string) (msg string, err error) {
 		return "", nil
 	}
 	referer := url.QueryEscape(r.dt.Url)
+
 	args := []string{
 		"-H", "Origin:" + referer,
 		"-H", "Referer:" + referer,
-		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(canvases)
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
@@ -123,7 +124,7 @@ func (r *War1931) do(canvases []string) (msg string, err error) {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		dest := r.dt.SavePath + string(os.PathSeparator) + filename
+		dest := filepath.Join(r.dt.SavePath, filename)
 		if FileExist(dest) {
 			continue
 		}

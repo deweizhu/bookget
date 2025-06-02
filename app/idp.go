@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path/filepath"
 	"regexp"
 )
 
@@ -72,7 +73,7 @@ func (r *Idp) download() (msg string, err error) {
 			continue
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
-		dest := r.dt.SavePath + sortId + ext
+		dest := filepath.Join(r.dt.SavePath, sortId+ext)
 		cli := gohttp.NewClient(ctx, gohttp.Options{
 			DestFile:   dest,
 			CookieJar:  r.dt.Jar,

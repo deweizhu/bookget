@@ -111,11 +111,13 @@ func (r *Sdutcm) do(imgUrls []string) (msg string, err error) {
 		}
 		csPath := crypt.EncodeURI(respBody.Url)
 		pdfUrl := "https://" + r.dt.UrlParsed.Host + "/getencryptFtpPdf.jspx?fileName=" + csPath + r.token
+
 		opts := gohttp.Options{
 			DestFile:    dest,
 			Overwrite:   false,
 			Concurrency: 1,
 			CookieFile:  config.Conf.CookieFile,
+			HeaderFile:  config.Conf.HeaderFile,
 			CookieJar:   r.dt.Jar,
 			Headers: map[string]interface{}{
 				"User-Agent": config.Conf.UserAgent,

@@ -1,6 +1,7 @@
 package gohttp
 
 import (
+	"bookget/pkg/chttp"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -292,6 +293,9 @@ func (r *Request) parseCookieFile() {
 }
 
 func (r *Request) parseHeaders() {
+	if r.opts.Headers == nil {
+		r.opts.Headers = make(map[string]interface{})
+	}
 	if r.opts.Headers != nil {
 		for k, v := range r.opts.Headers {
 			if vv, ok := v.(string); ok {
@@ -303,6 +307,15 @@ func (r *Request) parseHeaders() {
 					r.req.Header.Add(k, vvv)
 				}
 			}
+		}
+	}
+
+	// parse headerFile
+	headers, err := chttp.ReadHeadersFromFile(r.opts.HeaderFile)
+	if headers != nil && err == nil {
+		// 合并 headers（覆盖默认头）
+		for k, v := range headers {
+			r.req.Header.Set(k, v)
 		}
 	}
 }

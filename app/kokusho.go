@@ -186,7 +186,6 @@ func (p *Kokusho) doDezoomify(iiifUrls []string) bool {
 	args := []string{
 		"-H", "Origin:" + referer,
 		"-H", "Referer:" + referer,
-		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(iiifUrls)
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
@@ -237,6 +236,7 @@ func (p *Kokusho) doNormal(imgUrls []string) bool {
 				Overwrite:   false,
 				Concurrency: 1,
 				CookieFile:  config.Conf.CookieFile,
+				HeaderFile:  config.Conf.HeaderFile,
 				CookieJar:   p.dt.Jar,
 				Headers: map[string]interface{}{
 					"User-Agent": config.Conf.UserAgent,

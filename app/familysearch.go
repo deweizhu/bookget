@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -150,15 +151,11 @@ func (r *Familysearch) do(canvases []string) (err error) {
 		return errors.New("[err=do]")
 	}
 	referer := url.QueryEscape(r.rawUrl)
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
-
-	sid := r.getSessionId(cookies)
+	sid := r.getSessionId()
 	args := []string{
 		"-H", "authority:www.familysearch.org",
 		"-H", "Authorization:" + sid,
 		"-H", "referer:" + referer,
-		"-H", "User-Agent:" + config.Conf.UserAgent,
-		"-H", "chttp:" + cookies,
 	}
 	// 创建下载器实例
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
@@ -174,7 +171,7 @@ func (r *Familysearch) do(canvases []string) (err error) {
 			continue
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
-		dest := r.savePath + sortId + config.Conf.FileExt
+		dest := filepath.Join(r.savePath, sortId+config.Conf.FileExt)
 		if FileExist(dest) {
 			continue
 		}
@@ -197,7 +194,7 @@ func (r *Familysearch) getImageData(sUrl string) (imageData family.ImageData, er
 
 	bs, err := r.postBody(sUrl, data)
 	if err != nil {
-		fmt.Println("请求失败，chttp 可能已失效。")
+		fmt.Println("请求失败，cookie 可能已失效。")
 		return
 	}
 	var resultError family.ResultError
@@ -238,7 +235,7 @@ func (r *Familysearch) getCanvases(sUrl string, imageData family.ImageData) (can
 	data.Args.State.SelectedImageIndex = -1
 	data.Args.Locale = "zh"
 	data.Args.LoggedIn = true
-	data.Args.SessionId = r.getSessionId(chttp.CookiesFromFile(config.Conf.CookieFile))
+	data.Args.SessionId = r.getSessionId()
 
 	bs, err := r.postBody(sUrl, data)
 	if err != nil {
@@ -273,7 +270,11 @@ func (r *Familysearch) getCanvases(sUrl string, imageData family.ImageData) (can
 	return canvases, err
 }
 
-func (r *Familysearch) getSessionId(cookies string) string {
+func (r *Familysearch) getSessionId() string {
+	cookies, err := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
+	if err != nil {
+		return ""
+	}
 	//fssessionid=e10ce618-f7f7-45de-b2c3-d1a31d080d58-prod;
 	m := regexp.MustCompile(`fssessionid=([^;]+);`).FindStringSubmatch(cookies)
 	if m != nil {
@@ -293,7 +294,7 @@ func (r *Familysearch) getBody(sUrl string) ([]byte, error) {
 	req.Header.Set("origin", r.baseUrl)
 	req.Header.Set("referer", r.rawUrl)
 
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 		//sid := r.getSessionId(cookies)
@@ -357,10 +358,10 @@ func (r *Familysearch) postBody(sUrl string, postData interface{}) ([]byte, erro
 	req.Header.Set("referer", r.rawUrl)
 
 	// 添加cookie
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
-	if cookies != "" {
+	cookies, err := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
+	if err == nil && cookies != "" {
 		req.Header.Set("Cookie", cookies)
-		sid := r.getSessionId(cookies)
+		sid := r.getSessionId()
 		req.Header.Set("authorization", sid)
 	}
 

@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -81,7 +82,7 @@ func (r *Ncpssd) download() (msg string, err error) {
 func (r *Ncpssd) do(pdfUrl string) (msg string, err error) {
 	token, _ := r.getToken()
 	ext := util.FileExt(pdfUrl)
-	dest := r.dt.SavePath + r.dt.BookId + ext
+	dest := filepath.Join(r.dt.SavePath, r.dt.BookId+ext)
 	jar, _ := cookiejar.New(nil)
 	ctx := context.Background()
 	referer := "https://" + r.dt.UrlParsed.Host
@@ -91,6 +92,7 @@ func (r *Ncpssd) do(pdfUrl string) (msg string, err error) {
 		Concurrency: 1,
 		CookieJar:   jar,
 		CookieFile:  config.Conf.CookieFile,
+		HeaderFile:  config.Conf.HeaderFile,
 		Headers: map[string]interface{}{
 			"user-agent": config.Conf.UserAgent,
 			"Referer":    referer,

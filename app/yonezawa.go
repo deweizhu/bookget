@@ -115,6 +115,7 @@ func (p *Yonezawa) do(imgUrls []string) (msg string, err error) {
 				Overwrite:   false,
 				Concurrency: 1,
 				CookieFile:  config.Conf.CookieFile,
+				HeaderFile:  config.Conf.HeaderFile,
 				CookieJar:   p.dt.Jar,
 				Headers: map[string]interface{}{
 					"User-Agent": config.Conf.UserAgent,

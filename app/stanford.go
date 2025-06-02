@@ -163,10 +163,10 @@ func (r *Stanford) doDezoomify(iiifUrls []string) bool {
 		return false
 	}
 	referer := url.QueryEscape(r.dt.Url)
+
 	args := []string{
 		"-H", "Origin:" + referer,
 		"-H", "Referer:" + referer,
-		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(iiifUrls)
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
@@ -217,6 +217,7 @@ func (r *Stanford) doNormal(imgUrls []string) bool {
 				Overwrite:   false,
 				Concurrency: 1,
 				CookieFile:  config.Conf.CookieFile,
+				HeaderFile:  config.Conf.HeaderFile,
 				CookieJar:   r.dt.Jar,
 				Headers: map[string]interface{}{
 					"User-Agent": config.Conf.UserAgent,

@@ -133,7 +133,7 @@ func (r *NlcTw) getBody(rawUrl string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", config.Conf.UserAgent)
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}
@@ -193,7 +193,7 @@ func (r *NlcTw) postBody(rawUrl string, postData interface{}) ([]byte, error) {
 	req.Header.Set("Origin", "https://"+r.parsedUrl.Host)
 	req.Header.Set("Referer", r.rawUrl)
 
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}

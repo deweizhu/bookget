@@ -76,7 +76,7 @@ func (r *Gzlib) Run() (msg string, err error) {
 	apiUrl := fmt.Sprintf("https://%s/attach/GZDD/Attach/%s.pdf", r.parsedUrl.Hostname(), r.bookId)
 	fileName := fmt.Sprintf("%s.pdf", r.bookId)
 
-	headers := r.buildRequestHeader()
+	headers := BuildRequestHeader()
 	r.dm.UseSizeBar = true
 	// 添加GET下载任务
 	r.dm.AddTask(
@@ -93,22 +93,6 @@ func (r *Gzlib) Run() (msg string, err error) {
 	return "", err
 }
 
-func (r *Gzlib) buildRequestHeader() map[string]string {
-	httpHeaders := map[string]string{"User-Agent": config.Conf.UserAgent}
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
-	if cookies != "" {
-		httpHeaders["Cookie"] = cookies
-	}
-
-	headers, err := chttp.ReadHeadersFromFile(config.Conf.HeaderFile)
-	if err == nil {
-		for key, value := range headers {
-			httpHeaders[key] = value
-		}
-	}
-	return httpHeaders
-}
-
 func (r *Gzlib) getBody(sUrl string) ([]byte, error) {
 	req, err := http.NewRequest("GET", sUrl, nil)
 	if err != nil {
@@ -118,7 +102,7 @@ func (r *Gzlib) getBody(sUrl string) ([]byte, error) {
 	req.Header.Set("Origin", "https://"+r.parsedUrl.Host)
 	req.Header.Set("Referer", r.rawUrl)
 
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}

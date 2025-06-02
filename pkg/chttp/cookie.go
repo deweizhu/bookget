@@ -1,7 +1,6 @@
 package chttp
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -52,19 +51,16 @@ func sanitizeOrWarn(fieldName string, valid func(byte) bool, v string) string {
 	return string(buf)
 }
 
-func HttpCookieFromFile(cookieFile string) []http.Cookie {
-	if cookieFile == "" {
-		return nil
-	}
+func ReadHttpCookiesFromFile(cookieFile string) ([]http.Cookie, error) {
 	fp, err := os.Open(cookieFile)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer fp.Close()
 
 	bsHeader, err := io.ReadAll(fp)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	mHeader := strings.Split(string(bsHeader), "\n")
 	cookies := make([]http.Cookie, 0, len(mHeader)+1)
@@ -82,60 +78,13 @@ func HttpCookieFromFile(cookieFile string) []http.Cookie {
 		//expires := strings.ReplaceAll(row[4], "#HttpOnly_", "")
 		cookies = append(cookies, http.Cookie{Name: name, Value: value})
 	}
-	return cookies
+	return cookies, nil
 }
 
-func HttpHeaderFromFile(cookieFile string) http.Header {
-	if cookieFile == "" {
-		return nil
-	}
-	fp, err := os.Open(cookieFile)
-	if err != nil {
-		return nil
-	}
-	defer fp.Close()
-
-	bsHeader, err := io.ReadAll(fp)
-	if err != nil {
-		return nil
-	}
-	mHeader := strings.Split(string(bsHeader), "\n")
-	cookies := make([]http.Cookie, 0, len(mHeader)+1)
-	for _, line := range mHeader {
-		if strings.HasPrefix(line, "#") {
-			continue
-		}
-		text := regexp.MustCompile(`\\"`).ReplaceAllString(line, "\"")
-		row := strings.Split(text, "\t")
-		if len(row) < 8 {
-			continue
-		}
-		name := strings.ReplaceAll(row[5], "\"", "")
-		value := strings.ReplaceAll(row[6], "\"", "")
-		//expires := strings.ReplaceAll(row[4], "#HttpOnly_", "")
-		cookies = append(cookies, http.Cookie{Name: name, Value: value})
-	}
-
-	header := make(http.Header)
-	for _, v := range cookies {
-		s := fmt.Sprintf("%s=%s", sanitizeCookieName(v.Name), sanitizeCookieValue(v.Value, v.Quoted))
-		if c := header.Get("Cookie"); c != "" {
-			header.Set("Cookie", c+"; "+s)
-		} else {
-			header.Set("Cookie", s)
-		}
-	}
-
-	return header
-}
-
-func CookiesFromFile(cfile string) (cookies string) {
-	if cfile == "" {
-		return
-	}
+func ReadCookiesFromFile(cfile string) (cookies string, err error) {
 	bs, err := os.ReadFile(cfile)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	mCookie := strings.Split(string(bs), "\n")
 
@@ -153,5 +102,5 @@ func CookiesFromFile(cfile string) (cookies string) {
 		s := name + "=" + value + "; "
 		cookies += s
 	}
-	return cookies
+	return cookies, nil
 }

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path/filepath"
 	"regexp"
 )
 
@@ -65,7 +66,7 @@ func (p *Utokyo) download() (msg string, err error) {
 		log.Printf(" %d/%d volume, %s \n", i+1, len(respVolume), vol)
 		fName := util.FileName(vol)
 		sortId := fmt.Sprintf("%04d", i+1)
-		dest := p.dt.SavePath + sortId + fName
+		dest := filepath.Join(p.dt.SavePath, sortId+fName)
 		p.do(dest, vol)
 		util.PrintSleepTime(config.Conf.Sleep)
 	}
@@ -79,6 +80,7 @@ func (p *Utokyo) do(dest, pdfUrl string) (msg string, err error) {
 		Overwrite:   false,
 		Concurrency: config.Conf.Threads,
 		CookieFile:  config.Conf.CookieFile,
+		HeaderFile:  config.Conf.HeaderFile,
 		CookieJar:   p.dt.Jar,
 		Headers: map[string]interface{}{
 			"User-Agent": config.Conf.UserAgent,

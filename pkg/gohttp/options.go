@@ -15,14 +15,16 @@ type Options struct {
 	Retry       int
 	Query       interface{}
 	Headers     map[string]interface{}
-	Cookies     interface{}
-	CookieFile  string
-	CookieJar   *cookiejar.Jar
-	FormParams  map[string]interface{}
-	JSON        interface{}
-	Body        []byte
-	XML         interface{}
-	Proxy       string
-	DestFile    string //保存到本地文件
-	Overwrite   bool   //覆蓋文件
+	HeaderFile  string
+
+	Cookies    interface{}
+	CookieFile string
+	CookieJar  *cookiejar.Jar
+	FormParams map[string]interface{}
+	JSON       interface{}
+	Body       []byte
+	XML        interface{}
+	Proxy      string
+	DestFile   string //保存到本地文件
+	Overwrite  bool   //覆蓋文件
 }

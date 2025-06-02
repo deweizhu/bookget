@@ -100,6 +100,7 @@ func (p *Wzlib) do(dUrls []string) (msg string, err error) {
 			Overwrite:   false,
 			Concurrency: config.Conf.Threads,
 			CookieFile:  config.Conf.CookieFile,
+			HeaderFile:  config.Conf.HeaderFile,
 			CookieJar:   p.dt.Jar,
 		}
 		_, err = gohttp.FastGet(ctx, uri, opts)

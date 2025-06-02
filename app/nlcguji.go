@@ -247,7 +247,7 @@ func (s *NlcGuji) getBody(sUrl string) ([]byte, error) {
 	req.Header.Set("Origin", "https://"+s.parsedUrl.Host)
 	req.Header.Set("Referer", s.rawUrl)
 
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}
@@ -290,7 +290,7 @@ func (s *NlcGuji) postBody(sUrl string, postData []byte) ([]byte, error) {
 	req.Header.Set("Referer", s.rawUrl)
 	req.Header.Set("Content-Type", "application/json")
 
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}

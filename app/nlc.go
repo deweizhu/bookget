@@ -182,6 +182,7 @@ func (r *ChinaNlc) do(imgUrls []string) (msg string, err error) {
 				Overwrite:   false,
 				Concurrency: 1,
 				CookieFile:  config.Conf.CookieFile,
+				HeaderFile:  config.Conf.HeaderFile,
 				CookieJar:   r.jar,
 				Headers: map[string]interface{}{
 					"User-Agent": config.Conf.UserAgent,
@@ -302,6 +303,7 @@ func (r *ChinaNlc) doPdfUrl(sUrl, filename string) error {
 		Overwrite:   false,
 		Concurrency: 1,
 		CookieFile:  config.Conf.CookieFile,
+		HeaderFile:  config.Conf.HeaderFile,
 		CookieJar:   r.jar,
 		Headers: map[string]interface{}{
 			"User-Agent": config.Conf.UserAgent,

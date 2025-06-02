@@ -82,9 +82,10 @@ func (r DziCnLib) dezoomify() (msg string, err error) {
 
 	storePath := r.dt.SavePath
 	referer := url.QueryEscape(r.dt.Url)
-	args := []string{"-H", "Origin:" + referer,
+
+	args := []string{
+		"-H", "Origin:" + referer,
 		"-H", "Referer:" + referer,
-		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(r.Canvases)
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)

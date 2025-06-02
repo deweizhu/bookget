@@ -208,6 +208,7 @@ func (d *Download) dl(dest io.WriterAt, errC chan error) {
 	if d.opts.Headers == nil {
 		d.opts.Headers = make(map[string]interface{})
 	}
+
 	wg.Add(1)
 	go dlProgressBar(&wg, d)
 

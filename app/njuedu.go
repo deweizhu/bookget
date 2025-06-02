@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 )
 
@@ -90,10 +91,10 @@ func (r *Njuedu) do(dziUrls []string) (msg string, err error) {
 		return "", err
 	}
 	referer := url.QueryEscape(r.dt.Url)
-	args := []string{"--dezoomer=deepzoom",
+
+	args := []string{
 		"-H", "Origin:" + referer,
 		"-H", "Referer:" + referer,
-		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(dziUrls)
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
@@ -102,7 +103,7 @@ func (r *Njuedu) do(dziUrls []string) (msg string, err error) {
 			continue
 		}
 		fileName := fmt.Sprintf("%04d", i+1) + config.Conf.FileExt
-		inputUri := r.dt.SavePath + val
+		inputUri := filepath.Join(r.dt.SavePath, val)
 		outfile := path.Join(r.dt.SavePath, fileName)
 		if FileExist(outfile) {
 			continue
@@ -202,7 +203,7 @@ func (r *Njuedu) getCanvases(sUrl string, jar *cookiejar.Jar) (canvases []string
 	ext := config.Conf.FileExt[1:]
 	for key, item := range resp.Tiles {
 		sortId := fmt.Sprintf("%s.json", key)
-		dest := r.dt.SavePath + sortId
+		dest := filepath.Join(r.dt.SavePath, sortId)
 		serverUrl := fmt.Sprintf("%s/tiles/%s/", serverBase, key)
 		jsonText := ""
 		//ext := strings.ToLower(item.Extension)

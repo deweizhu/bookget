@@ -125,7 +125,7 @@ func (d *DownloaderImpl) getBody(rawUrl string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", config.Conf.UserAgent)
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}
@@ -189,7 +189,7 @@ func (d *DownloaderImpl) postBody(rawUrl string, postData interface{}) ([]byte, 
 	req.Header.Set("Origin", "https://"+d.parsedUrl.Host)
 	req.Header.Set("Referer", d.rawUrl)
 
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}
@@ -219,20 +219,4 @@ func (d *DownloaderImpl) postBody(rawUrl string, postData interface{}) ([]byte, 
 		return nil, err
 	}
 	return body, nil
-}
-
-func (d *DownloaderImpl) buildRequestHeader() map[string]string {
-	httpHeaders := map[string]string{"User-Agent": config.Conf.UserAgent}
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
-	if cookies != "" {
-		httpHeaders["Cookie"] = cookies
-	}
-
-	headers, err := chttp.ReadHeadersFromFile(config.Conf.HeaderFile)
-	if err == nil {
-		for key, value := range headers {
-			httpHeaders[key] = value
-		}
-	}
-	return httpHeaders
 }

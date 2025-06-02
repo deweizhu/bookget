@@ -192,12 +192,10 @@ func (r *Harvard) doDezoomify(canvases []string) (err error) {
 			continue
 		}
 		log.Printf("Get %d/%d  %s\n", i+1, sizeVol, uri)
-		cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+
 		args := []string{
 			"-H", "Origin:" + referer,
 			"-H", "Referer:" + referer,
-			"-H", "User-Agent:" + config.Conf.UserAgent,
-			"-H", "chttp:" + cookies,
 		}
 		iiifDownloader.Dezoomify(r.ctx, uri, dest, args)
 	}
@@ -320,7 +318,7 @@ func (r *Harvard) getBody(sUrl string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", config.Conf.UserAgent)
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}
@@ -377,7 +375,7 @@ func (r *Harvard) postBody(sUrl string, postData interface{}) ([]byte, error) {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	// 添加cookie
-	cookies := chttp.CookiesFromFile(config.Conf.CookieFile)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}

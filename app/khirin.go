@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -92,10 +93,10 @@ func (r *Khirin) doDezoomify(canvases []string) bool {
 		return false
 	}
 	referer := url.QueryEscape(r.dt.Url)
-	args := []string{"--dezoomer=iiif",
+
+	args := []string{
 		"-H", "Origin:" + referer,
 		"-H", "Referer:" + referer,
-		"-H", "User-Agent:" + config.Conf.UserAgent,
 	}
 	size := len(canvases)
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
@@ -105,7 +106,7 @@ func (r *Khirin) doDezoomify(canvases []string) bool {
 		}
 		sortId := fmt.Sprintf("%04d", i+1)
 		filename := sortId + config.Conf.FileExt
-		inputUri := r.dt.SavePath + sortId + "_info.json"
+		inputUri := filepath.Join(r.dt.SavePath, sortId+"_info.json")
 		bs, err := r.getBody(uri, r.dt.Jar)
 		if err != nil {
 			continue
@@ -148,6 +149,7 @@ func (r *Khirin) doNormal(canvases []string) bool {
 			Overwrite:   false,
 			Concurrency: 1,
 			CookieFile:  config.Conf.CookieFile,
+			HeaderFile:  config.Conf.HeaderFile,
 			CookieJar:   r.dt.Jar,
 			Headers: map[string]interface{}{
 				"User-Agent": config.Conf.UserAgent,
