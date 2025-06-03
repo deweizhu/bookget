@@ -252,6 +252,8 @@ func cleanupCookieFile() {
 
 // checkForUpdates 检查版本更新
 func checkForUpdates() {
+	//刪除舊版多餘目錄 （迭代幾個版本號，可移除此行）
+	_ = os.RemoveAll(config.BookgetHomeDir())
 	latestVersion, updateAvailable, err := versionChecker.CheckForUpdate()
 	if err != nil {
 		log.Printf("版本检查失败: %v\n", err)
