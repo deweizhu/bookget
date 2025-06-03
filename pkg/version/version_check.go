@@ -159,6 +159,6 @@ func (c *Checker) writeCache(version string) error {
 }
 
 func getCachePath() (string, error) {
-	homeDir := config.BookgetHomeDir()
+	homeDir := config.UserHomeDir()
 	return filepath.Join(homeDir, CacheFileName), nil
 }

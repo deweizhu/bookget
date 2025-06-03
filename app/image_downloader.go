@@ -2,6 +2,7 @@ package app
 
 import (
 	"bookget/config"
+	"bookget/pkg/chttp"
 	"bufio"
 	"bytes"
 	"context"
@@ -23,9 +24,7 @@ import (
 )
 
 const (
-	maxConcurrent = 8
-	userAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:139.0) Gecko/20100101 Firefox/139.0"
-	minFileSize   = 1024 // 最小文件大小(1KB)
+	minFileSize = 1024 // 最小文件大小(1KB)
 )
 
 type ImageDownloader struct {
@@ -41,11 +40,6 @@ type ImageDownloader struct {
 }
 
 func NewImageDownloader() *ImageDownloader {
-	maxConcurrent_ := maxConcurrent
-	if config.Conf.MaxConcurrent > 0 {
-		maxConcurrent_ = config.Conf.MaxConcurrent
-	}
-
 	// 创建自定义 Transport 忽略 SSL 验证
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
@@ -59,7 +53,7 @@ func NewImageDownloader() *ImageDownloader {
 		client:            &http.Client{Timeout: config.Conf.Timeout * time.Second, Jar: jar, Transport: tr},
 		reader:            bufio.NewReader(os.Stdin),
 		hasVolPlaceholder: false,
-		maxConcurrent:     maxConcurrent_,
+		maxConcurrent:     config.Conf.MaxConcurrent,
 		ctx:               context.Background(),
 	}
 }
@@ -332,7 +326,17 @@ func (i *ImageDownloader) downloadAndValidate(url, filePath string, globalBar *p
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", config.Conf.UserAgent)
+	cookies, _ := chttp.ReadCookiesFromFile(config.Conf.CookieFile)
+	if cookies != "" {
+		req.Header.Set("Cookie", cookies)
+	}
+	headers, err := chttp.ReadHeadersFromFile(config.Conf.HeaderFile)
+	if err == nil {
+		for key, value := range headers {
+			req.Header.Set(key, value)
+		}
+	}
 
 	resp, err := i.client.Do(req.WithContext(i.ctx))
 	if err != nil {
