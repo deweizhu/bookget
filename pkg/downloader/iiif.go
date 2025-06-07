@@ -302,10 +302,10 @@ func (d *IIIFDownloader) DezoomifyWithContent(ctx context.Context, content strin
 func (d *IIIFDownloader) DownloadTiles(ctx context.Context, info interface{}, headers http.Header) (image.Image, error) {
 	switch v := info.(type) {
 	case *IIIFInfo:
-		if v.version == 2 {
-			return d.downloadIIIFv2Tiles(ctx, v, headers)
+		if v.version == 3 {
+			return d.downloadIIIFv3Tiles(ctx, v, headers)
 		}
-		return d.downloadIIIFv3Tiles(ctx, v, headers)
+		return d.downloadIIIFv2Tiles(ctx, v, headers)
 	case *IIIFXMLInfo:
 		return d.downloadAndMergeXMLTiles(ctx, v, headers)
 	default:
@@ -1056,9 +1056,9 @@ func (d *IIIFDownloader) bestFormat(info *IIIFInfo) string {
 
 	// Find the highest priority format
 	for _, f := range formatOrder {
-		for _, fmt := range allFormats {
-			if strings.EqualFold(fmt, f) {
-				return fmt
+		for _, fmt_ := range allFormats {
+			if strings.EqualFold(fmt_, f) {
+				return fmt_
 			}
 		}
 	}

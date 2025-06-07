@@ -162,7 +162,7 @@ func FactoryRouter(siteID string, sUrl string) (map[string]interface{}, error) {
 		Router["www.loc.gov"] = app.NewLoc()
 
 		//[美国]斯坦福大学图书馆
-		Router["searchworks.stanford.edu"] = app.NewStanford()
+		//Router["searchworks.stanford.edu"] = app.NewStanford()
 
 		//[美国]犹他州家谱
 		Router["www.familysearch.org"] = app.NewFamilysearch()
