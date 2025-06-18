@@ -2,13 +2,12 @@ package app
 
 import (
 	"bookget/config"
-	"bookget/model/iiif"
+	"bookget/model/sdlib"
 	"bookget/pkg/chttp"
 	"bookget/pkg/downloader"
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,12 +16,13 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 )
 
-type Berlin struct {
+type Sdlib struct {
 	dm     *downloader.DownloadManager
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -40,7 +40,7 @@ type Berlin struct {
 	bookId    string
 }
 
-func NewBerlin() *Berlin {
+func NewSdlib() *Sdlib {
 	ctx, cancel := context.WithCancel(context.Background())
 	dm := downloader.NewDownloadManager(ctx, cancel, config.Conf.MaxConcurrent)
 
@@ -51,7 +51,7 @@ func NewBerlin() *Berlin {
 		},
 	}
 	jar, _ := cookiejar.New(nil)
-	return &Berlin{
+	return &Sdlib{
 		// 初始化字段
 		dm:     dm,
 		client: &http.Client{Timeout: config.Conf.Timeout * time.Second, Jar: jar, Transport: tr},
@@ -60,7 +60,7 @@ func NewBerlin() *Berlin {
 	}
 }
 
-func (r *Berlin) GetRouterInit(rawUrl string) (map[string]interface{}, error) {
+func (r *Sdlib) GetRouterInit(rawUrl string) (map[string]interface{}, error) {
 	r.rawUrl = rawUrl
 	r.parsedUrl, _ = url.Parse(rawUrl)
 	err := r.Run()
@@ -73,15 +73,25 @@ func (r *Berlin) GetRouterInit(rawUrl string) (map[string]interface{}, error) {
 	}, nil
 }
 
-func (r *Berlin) getBookId(sUrl string) (bookId string) {
-	m := regexp.MustCompile(`PPN=([A-z0-9_-]+)`).FindStringSubmatch(sUrl)
-	if m != nil {
-		bookId = m[1]
+func (r *Sdlib) getBookId(rawUrl string) (bookId string) {
+	const (
+		idPattern = `(?i)\?resId=([A-Za-z0-9_-]+)`
+	)
+
+	// 预编译正则表达式
+	var (
+		idRe = regexp.MustCompile(idPattern)
+	)
+
+	// 然后尝试匹配 id
+	if matches := idRe.FindStringSubmatch(r.rawUrl); matches != nil && len(matches) > 1 {
+		return matches[1]
 	}
-	return bookId
+
+	return "" // 明确返回空字符串表示未找到
 }
 
-func (r *Berlin) Run() (err error) {
+func (r *Sdlib) Run() (err error) {
 	r.bookId = r.getBookId(r.rawUrl)
 	if r.bookId == "" {
 		return err
@@ -89,86 +99,84 @@ func (r *Berlin) Run() (err error) {
 	r.savePath = config.Conf.Directory
 	r.urlsFile = path.Join(r.savePath, "urls.txt")
 
-	apiUrl := fmt.Sprintf("https://content.staatsbibliothek-berlin.de/dc/%s/manifest", r.bookId)
-	canvases, err := r.getCanvases(apiUrl)
-	if err != nil || canvases == nil {
+	r.canvases, err = r.getCanvases(r.rawUrl)
+	if err != nil || len(r.canvases) == 0 {
 		return err
 	}
-	r.do(canvases)
 
 	err = os.WriteFile(r.urlsFile, []byte(r.bufBuilder.String()), os.ModePerm)
 	if err != nil {
 		return err
 	}
 
+	r.do(r.canvases)
+
 	return nil
 }
 
-func (r *Berlin) do(canvases []string) (err error) {
-	if canvases == nil {
-		return errors.New("no image url")
+func (r *Sdlib) do(canvases []string) (err error) {
+	sizeVol := len(canvases)
+	if sizeVol <= 0 {
+		return err
 	}
 
-	args := []string{
-		"-H", "Origin: https://" + r.parsedUrl.Hostname(),
-		"-H", "Referer: https://" + r.parsedUrl.Hostname(),
-		"-H", "TE: trailers",
-	}
-	size := len(canvases)
-	// 创建下载器实例
-	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
-	for i, uri := range canvases {
-		if uri == "" || !config.PageRange(i, size) {
-			continue
-		}
-		sortId := fmt.Sprintf("%04d", i+1)
-		filename := sortId + config.Conf.FileExt
-		dest := path.Join(r.savePath, filename)
-		if FileExist(dest) {
-			continue
-		}
-		r.bufBody, err = r.getBody(uri)
-		if err != nil {
-			continue
-		}
-		dziUrl := string(r.bufBody)
-		r.bufBuilder.Write(r.bufBody)
-		r.bufBuilder.WriteString("\n")
+	counter := 0
+	headers := BuildRequestHeader()
+	for i, imgUrl := range canvases {
+		i++
+		sortId := fmt.Sprintf("%04d", i)
+		fileName := sortId + filepath.Ext(imgUrl)
 
-		log.Printf("Get %d/%d  %s\n", i+1, size, dziUrl)
-		iiifDownloader.Dezoomify(r.ctx, dziUrl, dest, args)
+		if imgUrl == "" || !config.PageRange(i, sizeVol) {
+			continue
+		}
+		//跳过存在的文件
+		if FileExist(path.Join(r.savePath, fileName)) {
+			continue
+		}
+		// 添加GET下载任务
+		r.dm.AddTask(
+			imgUrl,
+			"GET",
+			headers,
+			nil,
+			r.savePath,
+			fileName,
+			config.Conf.Threads,
+		)
+		counter++
 	}
+	fmt.Println()
+	r.dm.SetBar(counter)
+	r.dm.Start()
 	return nil
 }
 
-func (r *Berlin) getCanvases(sUrl string) (canvases []string, err error) {
-	bs, err := r.getBody(sUrl)
+func (r *Sdlib) getVolumes(rawUrl string) (volumes []string, err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (r *Sdlib) getCanvases(rawUrl string) (canvases []string, err error) {
+	apiUrl := fmt.Sprintf("http://%s/dev-api/ancientbooks/front/getFileContentPage/3/", r.parsedUrl.Host, r.bookId)
+	r.bufBody, err = r.getBody(apiUrl)
 	if err != nil {
-		return
+		return nil, err
 	}
-	var manifest = new(iiif.ManifestResponse)
-	if err = json.Unmarshal(bs, manifest); err != nil {
-		log.Printf("json.Unmarshal failed: %s\n", err)
-		return
+	resp := sdlib.Response{}
+	if err = json.Unmarshal(r.bufBody, &resp); err != nil {
+		return nil, err
 	}
-	if len(manifest.Sequences) == 0 {
-		return
+	r.canvases = make([]string, 0, len(resp.Data))
+	for _, d := range resp.Data {
+		r.bufBuilder.WriteString(d.Url)
+		r.bufBuilder.WriteString("\n")
+		r.canvases = append(r.canvases, d.Url)
 	}
-	size := len(manifest.Sequences[0].Canvases)
-	canvases = make([]string, 0, size)
-	for _, canvase := range manifest.Sequences[0].Canvases {
-		for _, image := range canvase.Images {
-			//https://ngcs-core.staatsbibliothek-berlin.de/dzi/PPN3303598630/PHYS_0001.dzi
-			m := regexp.MustCompile("/dc/([A-z0-9]+)-([A-z0-9]+)/full").FindStringSubmatch(image.Resource.Id)
-			iiiInfo := fmt.Sprintf("https://content.staatsbibliothek-berlin.de/?action=metsImage&metsFile=%s&divID=PHYS_%s&dzi=true", r.bookId, m[2])
-			canvases = append(canvases, iiiInfo)
-		}
-	}
-	return canvases, nil
-
+	return r.canvases, err
 }
 
-func (r *Berlin) getBody(rawUrl string) ([]byte, error) {
+func (r *Sdlib) getBody(rawUrl string) ([]byte, error) {
 	req, err := http.NewRequest("GET", rawUrl, nil)
 	if err != nil {
 		return nil, err
@@ -205,7 +213,7 @@ func (r *Berlin) getBody(rawUrl string) ([]byte, error) {
 	return body, nil
 }
 
-func (r *Berlin) postBody(rawUrl string, postData interface{}) ([]byte, error) {
+func (r *Sdlib) postBody(rawUrl string, postData interface{}) ([]byte, error) {
 	//TODO implement me
 	panic("implement me")
 }

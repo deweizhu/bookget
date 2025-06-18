@@ -77,6 +77,8 @@ func FactoryRouter(siteID string, sUrl string) (map[string]interface{}, error) {
 
 		//[中国]山东中医药大学古籍数字图书馆
 		Router["gjsztsg.sdutcm.edu.cn"] = app.NewSdutcm()
+		//[中国]山东省古籍数字资源平台
+		Router["guji.sdlib.com"] = app.NewSdlib()
 
 		//[中国]天津图书馆历史文献数字资源库
 		Router["lswx.tjl.tj.cn:8001"] = app.NewTjlswx()
@@ -162,13 +164,12 @@ func FactoryRouter(siteID string, sUrl string) (map[string]interface{}, error) {
 		Router["www.loc.gov"] = app.NewLoc()
 
 		//[美国]斯坦福大学图书馆
-		//Router["searchworks.stanford.edu"] = app.NewStanford()
 
 		//[美国]犹他州家谱
 		Router["www.familysearch.org"] = app.NewFamilysearch()
 
 		//[德国]柏林国立图书馆
-		Router["digital.staatsbibliothek-berlin.de"] = app.NewOnbDigital()
+		Router["digital.staatsbibliothek-berlin.de"] = app.NewBerlin()
 
 		//[德国]巴伐利亞州立圖書館東亞數字資源庫
 		Router["ostasien.digitale-sammlungen.de"] = app.NewSammlungen()

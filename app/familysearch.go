@@ -159,12 +159,12 @@ func (r *Familysearch) do(canvases []string) (err error) {
 	}
 	// 创建下载器实例
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
-	iiifDownloader.SetDeepZoomTileFormat("{{.ServerURL}}/{{.URL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
+	iiifDownloader.SetDeepZoomTileFormat("{{.ServerBaseURL}}/{{.URL}}_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
 	// 设置固定值
 	iiifDownloader.DeepzoomTileFormat.FixedValues = map[string]interface{}{
 		//"Level":     12,
-		"Format":    "jpg",
-		"ServerURL": r.sgBaseUrl,
+		"Format":        "jpg",
+		"ServerBaseURL": r.sgBaseUrl,
 	}
 	for i, uri := range canvases {
 		if uri == "" || !config.PageRange(i, sizeVol) {

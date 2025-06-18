@@ -19,6 +19,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -169,7 +170,7 @@ func NewIIIFDownloader(c *config.Input) *IIIFDownloader {
 
 	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{if .sizeUpscaling}}^{{end}}{{.Width}},{{.Height}}/0/default.{{.Format}}")
 
-	dl.SetDeepZoomTileFormat("{{.URL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
+	dl.SetDeepZoomTileFormat("{{.URL}}_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
 
 	return dl
 }
@@ -205,7 +206,7 @@ func NewIIIFDownloaderDefault() *IIIFDownloader {
 	// 更新模板，在size部分支持 ^ 前缀
 	//dl.SetIIIFTileFormat("{{.ID}}/{{.X}},{{.Y}},{{.Width}},{{.Height}}/{{if .sizeUpscaling}}^{{end}}{{.Width}},{{.Height}}/0/default.{{.Format}}")
 
-	dl.SetDeepZoomTileFormat("{{.URL}}/image_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
+	dl.SetDeepZoomTileFormat("{{.URL}}_files/{{.Level}}/{{.X}}_{{.Y}}.{{.Format}}")
 
 	return dl
 }
@@ -858,7 +859,7 @@ func (d *IIIFDownloader) getIIIFInfoByURL(ctx context.Context, url string, heade
 	switch ext {
 	case ".json":
 		return d.getIIIFInfo(ctx, url, headers)
-	case ".xml":
+	case ".xml", ".dzi":
 		return d.getIIIFXMLInfo(ctx, url, headers)
 	default:
 		info, err := d.getIIIFInfo(ctx, url, headers)
@@ -870,19 +871,20 @@ func (d *IIIFDownloader) getIIIFInfoByURL(ctx context.Context, url string, heade
 }
 
 func (d *IIIFDownloader) getImagePathFromXMLURL(xmlURL string) (string, error) {
-	u, err := url.Parse(xmlURL)
+	// 1. 解析URL
+	parsedURL, err := url.Parse(xmlURL)
 	if err != nil {
 		return "", err
 	}
 
-	path := strings.TrimSuffix(u.Path, "/image.xml")
-	path = strings.TrimPrefix(path, "/")
+	// 2. 获取路径部分（不含查询参数和片段）
+	urlPath := parsedURL.Path // 输出: /dzi/PPN334367107X/PHYS_0001.dzi
 
-	if path == "" {
-		return "", fmt.Errorf("无法从URL提取图像路径")
-	}
-
-	return path, nil
+	// 3. 去除扩展名
+	basePath := strings.TrimSuffix(urlPath, path.Ext(urlPath)) // 关键步骤
+	// 4. 重建完整URL
+	resultURL := parsedURL.Scheme + "://" + parsedURL.Host + basePath
+	return resultURL, nil
 }
 
 func (d *IIIFDownloader) getMaxZoomLevel(width, height int) int {
@@ -1115,11 +1117,21 @@ func (d *IIIFDownloader) buildDeepZoomTileURL(data map[string]interface{}) (stri
 		mergedData[k] = v
 	}
 
+	// 如果提供了 ServerBaseURL ，使其覆盖 URL HOST
+	if _, ok := mergedData["ServerBaseURL"]; ok {
+		if id, ok := data["URL"].(string); ok {
+			if u, err := url.Parse(id); err == nil {
+				mergedData["URL"] = strings.TrimPrefix(u.Path, "/")
+			}
+		}
+	}
+
 	var buf bytes.Buffer
 	err := d.DeepzoomTileFormat.compiledTemplate.Execute(&buf, mergedData)
 	if err != nil {
 		return "", fmt.Errorf("执行 DeepZoom tileURL 模板失败: %v", err)
 	}
+
 	return buf.String(), nil
 }
 
