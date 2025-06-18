@@ -22,10 +22,18 @@ public:
     std::wstring GetFilePath(const std::wstring& sUrl);
 
     void Reset(std::wstring sUrl, int runMode) {
+        std::lock_guard<std::mutex> lock(m_downloadCounterMutex);
+        m_downloadCounter = 0;
         m_targetUrls.clear();
         m_targetUrls.emplace_back(sUrl);
         m_downloaderMode = runMode;
     }
+
+    void ZeroCounter() {
+        std::lock_guard<std::mutex> lock(m_downloadCounterMutex);
+        m_downloadCounter = 0;
+    }
+
     int GetDownloaderMode(){return m_downloaderMode;};
 
 private:

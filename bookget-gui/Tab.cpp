@@ -111,6 +111,9 @@ HRESULT Tab::Init(ICoreWebView2Environment* env, bool shouldBeActive)
             args->put_Handled(TRUE);
             return S_OK;
         }).Get(), &m_newWindowRequestedToken));
+
+        //
+         browserWindow->m_downloader.ZeroCounter();
          // 设置监听下载器
          SetupWebViewListeners();
 
@@ -305,7 +308,15 @@ void Tab::SetupWebViewListeners()
                             wil::unique_cotaskmem_string uri;
                             if (SUCCEEDED(request->get_Uri(&uri)) && uri)
                             {
+                                // 1. 检查请求方法是否为 OPTIONS（预检请求）
+                                LPWSTR method;
+                                request->get_Method(&method);
+                                if (wcscmp(method, L"OPTIONS") == 0) {
+                                    return S_OK; 
+                                }
+
                                std::wstring url(uri.get());
+
                                if (url.find(L"disable-devtool.js") != std::wstring::npos) {
                                     args->put_Response(nullptr); // 阻止加载
                                     wil::com_ptr<ICoreWebView2WebResourceResponse> emptyResponse;
@@ -316,21 +327,29 @@ void Tab::SetupWebViewListeners()
                                         L"",      
                                         &emptyResponse);
                                     args->put_Response(emptyResponse.get());
-
-                                    ////或
-                                    // wil::com_ptr<ICoreWebView2WebResourceResponse> response;
-                                    //this->CreateModifiedResponse(url, args, &response);
-                                    //args->put_Response(response.get());
-
                                     return S_OK;
                                 }
 
                                 // 获取所有请求头
                                 wil::com_ptr<ICoreWebView2HttpRequestHeaders> headers;
                                 request->get_Headers(&headers);
-                                if(!browserWindow->DownloadFile(uri.get(),headers.get())) {
-                                    return S_OK;  
+
+                                int mode = browserWindow->m_downloader.GetDownloaderMode();
+                                if(mode == 1 && browserWindow->m_downloader.ShouldInterceptRequest(uri.get()))
+                                {
+                                    browserWindow->DownloadFile(uri.get(),headers.get());
+                                    //args->put_Response(nullptr); // 阻止加载
+                                    //wil::com_ptr<ICoreWebView2WebResourceResponse> emptyResponse;
+                                    //this->m_contentEnv->CreateWebResourceResponse(
+                                    //    nullptr,  
+                                    //    403,      
+                                    //    L"Blocked", 
+                                    //    L"",      
+                                    //    &emptyResponse);
+                                    //args->put_Response(emptyResponse.get());
                                 }
+                               
+                                return S_OK;  
                             }
                         }
                         return S_OK;

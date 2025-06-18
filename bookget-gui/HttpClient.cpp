@@ -1,4 +1,6 @@
 #include "HttpClient.h"
+#include "Util.h"
+#include <regex>
 
 
 std::string HttpClient::get(const std::string& url,
@@ -128,8 +130,30 @@ std::string HttpClient::build_request(const std::string& host,
         "Host: " + host + "\r\n";
         
     // 添加自定义头
-    for (const auto& header : headers) {
-        request += header.first + ": " + header.second + "\r\n";
+     static const std::regex pattern(R"(\s*"Microsoft Edge WebView2";v="\d+",)");  // 静态编译正则
+     for (const auto& [key, value] : headers) {  // 使用结构化绑定(C++17)
+
+        //伪装成 Google Chrome
+        if (key == "User-Agent" && value.find("Edg") != std::string::npos) {
+            if (size_t edg_pos = value.find(" Edg/"); edg_pos != std::string::npos) {  // if初始化语句(C++17)
+                request.reserve(request.size() + key.size() + value.size() + 4);  // 预分配内存
+                request.append(key).append(": ").append(value, 0, edg_pos).append("\r\n");
+                continue;
+            }
+        }
+    
+        if (key == "sec-ch-ua") {
+            if (value.find("WebView2") != std::string::npos) {
+                std::string sec_ch_ua = std::regex_replace(value, pattern, "");
+                sec_ch_ua = Util::replace_fast(sec_ch_ua, "Microsoft Edge", "Google Chrome");
+                request.reserve(request.size() + key.size() + sec_ch_ua.size() + 4);
+                request.append(key).append(": ").append(sec_ch_ua).append("\r\n");
+                continue;
+            }
+        }
+    
+        request.reserve(request.size() + key.size() + value.size() + 4);
+        request.append(key).append(": ").append(value).append("\r\n");
     }
         
     request += "Connection: close\r\n\r\n";
@@ -145,9 +169,31 @@ std::string HttpClient::build_post_request(const std::string& host,
         "Host: " + host + "\r\n"
         "Content-Length: " + std::to_string(body.length()) + "\r\n";
         
-    // Add custom headers
-    for (const auto& header : headers) {
-        request += header.first + ": " + header.second + "\r\n";
+     // 添加自定义头
+     static const std::regex pattern(R"(\s*"Microsoft Edge WebView2";v="\d+",)");  // 静态编译正则
+     for (const auto& [key, value] : headers) {  // 使用结构化绑定(C++17)
+
+        //伪装成 Google Chrome
+        if (key == "User-Agent" && value.find("Edg") != std::string::npos) {
+            if (size_t edg_pos = value.find(" Edg/"); edg_pos != std::string::npos) {  // if初始化语句(C++17)
+                request.reserve(request.size() + key.size() + value.size() + 4);  // 预分配内存
+                request.append(key).append(": ").append(value, 0, edg_pos).append("\r\n");
+                continue;
+            }
+        }
+    
+        if (key == "sec-ch-ua") {
+            if (value.find("WebView2") != std::string::npos) {
+                std::string sec_ch_ua = std::regex_replace(value, pattern, "");
+                sec_ch_ua = Util::replace_fast(sec_ch_ua, "Microsoft Edge", "Google Chrome");
+                request.reserve(request.size() + key.size() + sec_ch_ua.size() + 4);
+                request.append(key).append(": ").append(sec_ch_ua).append("\r\n");
+                continue;
+            }
+        }
+    
+        request.reserve(request.size() + key.size() + value.size() + 4);
+        request.append(key).append(": ").append(value).append("\r\n");
     }
         
     request += "Connection: close\r\n\r\n";

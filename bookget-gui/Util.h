@@ -62,5 +62,7 @@ public:
 
     static std::string removeDisableDevtoolJsCode(const std::string& input);
     static std::string ReadStreamToString(IStream* stream);
+
+    std::vector<uint8_t> removeJPGHeader(const std::vector<uint8_t>& imageData, const std::string& headerMarker);
 };
 

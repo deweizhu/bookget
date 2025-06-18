@@ -735,3 +735,17 @@ std::string Util::ReadStreamToString(IStream* stream) {
     
     return content;
 }
+
+std::vector<uint8_t> Util::removeJPGHeader(const std::vector<uint8_t>& imageData, const std::string& headerMarker) {
+    if (imageData.empty() || headerMarker.size() > imageData.size()) {
+        return {};
+    }
+
+    if (memcmp(imageData.data(), headerMarker.data(), headerMarker.size()) != 0) {
+        return imageData;
+    }
+
+    std::vector<uint8_t> result(imageData.size() - headerMarker.size());
+    memcpy(result.data(), imageData.data() + headerMarker.size(), result.size());
+    return result;
+}

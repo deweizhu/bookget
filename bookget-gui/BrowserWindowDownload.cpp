@@ -14,7 +14,7 @@ HRESULT BrowserWindow::HandleTabWebResourceResponseReceived(ICoreWebView2* sende
     wil::unique_cotaskmem_string uri;
     RETURN_IF_FAILED(request->get_Uri(&uri));
 
-   if (!m_downloader.ShouldInterceptResponse(uri.get()))
+    if (!m_downloader.ShouldInterceptResponse(uri.get()))
        return S_OK;
 
     wil::com_ptr<ICoreWebView2WebResourceResponseView> response;
@@ -93,12 +93,22 @@ bool BrowserWindow::DownloadFile(const std::wstring& sUrl, IStream *content)
 
 bool BrowserWindow::DownloadFile(const std::wstring& sUrl,ICoreWebView2HttpRequestHeaders *headers)
 {
-    int mode = m_downloader.GetDownloaderMode();
-    if (mode == 1) {
-         if (!m_downloader.ShouldInterceptRequest(sUrl))
-            return false;
+    m_downloader.DownloadFile(sUrl.c_str(), headers);
+    int sleepTime = Config::GetInstance().GetSleepTime();
+    if (sleepTime > 0)
+            std::this_thread::sleep_for(std::chrono::seconds(sleepTime)); // 3 秒延时
 
-        return m_downloader.DownloadFile(sUrl.c_str(), headers);
+        //执行 javascript 脚本
+    std::wstring scriptPath;
+    std::string narrow_url = Util::WideToUtf8(sUrl);
+    for (const auto& site : Config::GetInstance().GetSiteConfigs()) {
+        if (site.intercept == 0 && Util::matchUrlPattern(site.url, narrow_url) ) {
+            scriptPath = GetFullPathFor(Util::Utf8ToWide(site.script).c_str());
+            break;
+        }
+    }
+    if(scriptPath.length() > 0) {
+        this->ExecuteScriptFile(scriptPath, m_tabs.at(m_activeTabId)->m_contentWebView.get());
     }
     return false;
 }
