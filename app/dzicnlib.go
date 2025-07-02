@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -89,7 +90,7 @@ func (r DziCnLib) dezoomify() (msg string, err error) {
 	}
 	size := len(r.Canvases)
 	iiifDownloader := downloader.NewIIIFDownloader(&config.Conf)
-	err = iiifDownloader.SetDeepZoomTileFormat("{{.ServerURL}}/{{.Level}}/{{.X}}/{{.Y}}.{{.Format}}")
+	err = iiifDownloader.SetDeepZoomTileFormat("{{.URL}}/{{.Level}}/{{.X}}/{{.Y}}.{{.Format}}")
 	if err != nil {
 		return "[err=SetDeepZoomTileFormat]", err
 	}
@@ -105,12 +106,12 @@ func (r DziCnLib) dezoomify() (msg string, err error) {
 		if !config.PageRange(i, size) {
 			continue
 		}
-		outputPath := storePath + fmt.Sprintf("%04d", i+1) + config.Conf.FileExt
-		if FileExist(outputPath) {
+		target := path.Join(storePath, fmt.Sprintf("%04d", i+1)+config.Conf.FileExt)
+		if FileExist(target) {
 			continue
 		}
 
-		err = iiifDownloader.DezoomifyWithContent(r.ctx, xml, outputPath, args)
+		err = iiifDownloader.DezoomifyWithContent(r.ctx, xml, target, args)
 		if err != nil {
 			return "[err=iiifDownloader.Dezoomify]", err
 		}
