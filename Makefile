@@ -10,6 +10,11 @@ DIST_DIR ?= dist
 build:
 	@echo "Building $(TARGET) for $(GOOS)-$(GOARCH)"
 	@mkdir -p $(DIST_DIR)/$(GOOS)-$(GOARCH)
+	@if [ -f $(DIST_DIR)/$(GOOS)-$(GOARCH)/$(TARGET)$(SUFFIX) ]; then \
+		echo "Detected old file: $(DIST_DIR)/$(GOOS)-$(GOARCH)/$(TARGET)$(SUFFIX), deleting..."; \
+		echo "rm -f $(DIST_DIR)/$(GOOS)-$(GOARCH)/$(TARGET)$(SUFFIX)"; \
+		rm -f $(DIST_DIR)/$(GOOS)-$(GOARCH)/$(TARGET)$(SUFFIX); \
+	fi
 	CGO_ENABLED=0 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" \
 		-o $(DIST_DIR)/$(GOOS)-$(GOARCH)/$(TARGET)$(SUFFIX) ./cmd/
 
